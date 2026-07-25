@@ -106,10 +106,11 @@ shared/kv-client.js → shared/auth.js → collect-dates.js → collect-state.js
 
 | 데이터 | 저장 키 | 저장 위치(누가/언제 쓰는가) |
 |---|---|---|
-| 담당자 목록 | `ktis_v11__weekly_members` | `collect-manage-panel.js`, 통째로 저장 |
-| 센터 목록 | `ktis_v11__weekly_centers` | `collect-manage-panel.js`/`collect-rate-panel.js`, 통째로 저장 |
-| 응대율 컬럼폭 | `ktis_v11__weekly_ratewidths` | `collect-rate-panel.js`, 통째로 저장 |
-| 자료보관함(워드 저장본) | `ktis_v11__weekly_archive` | `collect-main-panel.js`, 통째로 저장 |
+| 담당자 목록 | `ktis_v11__weekly_members` | `collect-manage-panel.js`, 배치 저장(`apiSetMany`, `flushStateToServer`) |
+| 센터 목록 | `ktis_v11__weekly_centers` | `collect-manage-panel.js`/`collect-rate-panel.js`, 배치 저장 |
+| 응대율 컬럼폭 | `ktis_v11__weekly_ratewidths` | `collect-rate-panel.js`, 배치 저장 |
+| 자료보관함 목록(메타데이터만, base64 없음) | `ktis_v11__weekly_archive_index` | `collect-main-panel.js`, 배치 저장 |
+| 자료보관함 실제 파일(base64, 항목별) | `ktis_v11__weekly_archive_item__{id}` | `collect-main-panel.js`의 `saveWordAndArchive` — 큰 값이라 `apiSet`이 필요하면 자동 청크 분할 |
 | 담당자별 실적/계획 (주차 단위) | `ktis_v11__weekly__rpt__{weekKey}__{memberId}` | `collect-member-panel.js`의 `saveMemberDraft` — **이 담당자 몫만** 저장 |
 | 취합본 (주차 단위) | `ktis_v11__weekly__agg__{weekKey}` | `collect-main-panel.js`의 `flushFinalEditNow`/`doAggregate` |
 | 응대율 (센터·월 단위) | `ktis_v11__weekly__rate__{monthKey}__{centerId}` | `collect-rate-panel.js`의 `onRateCellChange`/`saveRateMonth` — **이 센터 몫만** 저장 |
@@ -119,6 +120,12 @@ shared/kv-client.js → shared/auth.js → collect-dates.js → collect-state.js
 (`rpt`/`agg`/`rate`)로 구분해 `state.reports`/`state.aggregates`/`state.monthRates`에 나눠 담는다.
 새로 이런 "여러 명이 동시에 각자 다른 항목을 쓰는" 데이터를 추가할 때는 반드시 항목별 키로 설계할 것 —
 "주차/월 전체를 하나의 키로" 패턴으로 되돌아가지 않는다.
+
+**자료보관함은 2026-07-26에 "배열 전체를 한 키에" 저장하던 걸 항목별 키로 분리했다** —
+워드 파일(base64)이 최대 30개까지 쌓이는 배열을 통째로 저장하는 건 회사망 payload 크기 차단의
+직접 원인이 되는 패턴이었다(`~/dev-standards/network-resilient-storage.md` 참고, `shared/docs/SHARED-CODEMAP.md`
+§저장 관련 원칙에도 동일 원칙 명시). 새 필드를 자료보관함에 추가할 때도 이 분리를 유지할 것.
+저장/조회는 `shared/kv-client.js`가 필요하면 자동으로 청크 분할하므로 이 파일에서 크기를 신경 쓸 필요는 없다.
 
 화면 전용 상태(현재 탭, 자료보관함 페이지)는 서버로 보내지 않고 브라우저 `localStorage`(`kkangbi_weekly_ui_v1`)에만 둔다 — 팀원마다 다를 수 있는 값이라 공유할 필요가 없음.
 

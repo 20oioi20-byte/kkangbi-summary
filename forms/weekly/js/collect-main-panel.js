@@ -170,20 +170,23 @@ async function saveWordAndArchive(){
     const blob = await buildDocxBlob(meta, agg.linesPerf||[], agg.linesPlan||[]);
     const fileName = makeDocFileName(meta);
     const b64 = await blobToBase64(blob);
-    // 보관함 추가 (최대 30, 초과 시 오래된 것 삭제)
+    const id = 'a'+Date.now();
+    // 보관함 목록에는 메타데이터만 넣는다(base64 제외) — 실제 파일은 archiveItemKey로 따로 저장.
+    // 목록을 계속 작게 유지해야 회사망 payload 크기 문제를 피할 수 있다.
     state.archive = state.archive || [];
     state.archive.unshift({
-      id: 'a'+Date.now(),
+      id,
       fileName,
       createdAt: new Date().toISOString(),
       weekKey: meta.weekKey,
       weekLabel: meta.fullLabel,
-      base64: b64,
       size: blob.size
     });
-    while(state.archive.length > ARCHIVE_MAX) state.archive.pop();
+    const overflow = state.archive.length > ARCHIVE_MAX ? state.archive.splice(ARCHIVE_MAX) : [];
     state.archivePage = 1;
-    saveState();
+    saveState(); // 목록 저장(작음, 배치로)
+    apiSet(archiveItemKey(id), {base64:b64}).catch(()=> flash('보관함 파일 저장 실패: 네트워크를 확인해 주세요'));
+    overflow.forEach(o => apiDelete(archiveItemKey(o.id))); // 초과분 실제 파일도 정리(고아 데이터 방지)
     downloadBlob(blob, fileName);
     flash(`저장 완료: ${fileName} (자료보관함 반영)`);
     renderAll();

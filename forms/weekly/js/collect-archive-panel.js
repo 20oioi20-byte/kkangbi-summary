@@ -37,10 +37,13 @@ function shiftArchivePage(d){
   state.archivePage = (state.archivePage||1)+d;
   renderAll();
 }
-function redownloadArchive(id){
+async function redownloadArchive(id){
   const a = (state.archive||[]).find(x=>x.id===id);
   if(!a){ flash('자료를 찾을 수 없습니다'); return; }
-  const blob = base64ToBlob(a.base64, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+  flash('불러오는 중…');
+  const item = await apiGet(archiveItemKey(id));
+  if(!item || !item.base64){ flash('파일을 불러오지 못했습니다. 다시 시도해 주세요'); return; }
+  const blob = base64ToBlob(item.base64, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
   downloadBlob(blob, a.fileName);
   flash('다운로드 시작');
 }
@@ -48,6 +51,7 @@ function deleteArchive(id){
   if(!confirm('이 자료를 보관함에서 삭제할까요?')) return;
   state.archive = (state.archive||[]).filter(x=>x.id!==id);
   saveState();
+  apiDelete(archiveItemKey(id));
   flash('삭제되었습니다');
   renderAll();
 }

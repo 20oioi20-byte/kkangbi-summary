@@ -115,24 +115,47 @@ function deleteCenter(id){
 }
 async function resetAllData(){
   if(!confirm('전체 초기화할까요? (보관함 포함, 팀원 전체에게 반영됩니다)')) return;
-  const globalKeys = [`${KP}_members`, `${KP}_centers`, `${KP}_ratewidths`, `${KP}_archive`];
+  // 자료보관함 실제 파일들은 청크가 있을 수 있어 apiDelete(청크까지 정리)로 개별 삭제
+  const archiveIds = (state.archive||[]).map(a=>a.id);
+  await Promise.all(archiveIds.map(id => apiDelete(archiveItemKey(id))));
   const weekRows = await apiList(WEEK_PREFIX); // 담당자별 실적/계획, 취합본, 응대율 전부 이 접두어 아래에 있음
-  const keys = [...globalKeys, ...weekRows.map(r=>r.key)];
-  await Promise.all(keys.map(apiDelete));
+  const smallKeys = [`${KP}_members`, `${KP}_centers`, `${KP}_ratewidths`, archiveIndexKey(), ...weekRows.map(r=>r.key)];
+  await apiDeleteMany(smallKeys);
   state=defaultState(); draftBuffers={}; expandedHist={};
   flash('초기화 완료'); refreshWeekChrome(); renderAll();
 }
 function exportAllJson(){
+  // 자료보관함 실제 파일(base64)은 포함하지 않는다(용량이 커서) — 목록(메타데이터)만 담긴다.
+  // 파일 자체는 서버(archiveItemKey)에 그대로 남아있으니 필요하면 자료보관함에서 개별 다운로드.
   const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
   downloadBlob(blob, `주간보고취합_백업_${currentMeta().weekKey}.json`);
 }
 function importAllJson(ev){
   const file=ev.target.files&&ev.target.files[0]; if(!file) return;
   const reader=new FileReader();
-  reader.onload=()=>{
+  reader.onload=async ()=>{
     try{
       state=Object.assign(defaultState(), JSON.parse(reader.result));
-      saveState(); flash('복원 완료'); renderAll();
+      saveState(); // 담당자/센터 목록, 응대율 컬럼폭, 보관함 목록
+      // 담당자별 실적/계획·취합본·응대율은 각자 키로 저장해야 서버에 실제 반영된다
+      // (saveState()는 목록류만 저장함 — 이걸 빠뜨리면 "복원됐다"는 화면만 보이고
+      // 새로고침하면 서버에서 다시 불러오면서 사라진다).
+      const entries = [];
+      Object.keys(state.reports||{}).forEach(wk=>{
+        Object.keys(state.reports[wk]||{}).forEach(mid=>{
+          entries.push({key: reportKey(wk, mid), value: state.reports[wk][mid]});
+        });
+      });
+      Object.keys(state.aggregates||{}).forEach(wk=>{
+        entries.push({key: aggKey(wk), value: state.aggregates[wk]});
+      });
+      Object.keys(state.monthRates||{}).forEach(mk=>{
+        Object.keys(state.monthRates[mk]||{}).forEach(cid=>{
+          entries.push({key: rateKey(mk, cid), value: state.monthRates[mk][cid]});
+        });
+      });
+      if(entries.length) await apiSetMany(entries).catch(()=> flash('일부 데이터 복원 저장 실패: 네트워크를 확인해 주세요'));
+      flash('복원 완료'); renderAll();
     }catch(e){ flash('복원 실패'); }
   };
   reader.readAsText(file); ev.target.value='';

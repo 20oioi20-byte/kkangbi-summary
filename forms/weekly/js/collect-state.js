@@ -87,22 +87,30 @@ function saveKV(key, value){
   apiSet(key, value).catch(()=> flash('저장 실패: 네트워크를 확인해 주세요'));
 }
 
+// 자료보관함: 워드 파일(base64)은 항목당 수십~수백KB가 될 수 있고 최대 30개까지 쌓이므로,
+// "배열 전체를 한 키에" 저장하면 회사망 payload 크기 차단에 정면으로 걸리는 구조가 된다
+// (dev-standards/network-resilient-storage.md 사고 사례와 동일 패턴). 그래서 목록(메타데이터만,
+// base64 제외)과 각 항목의 실제 파일(base64)을 분리해서 저장한다 — 목록은 항상 작고, 파일은
+// shared/kv-client.js가 필요하면 알아서 청크로 쪼개 보낸다.
+function archiveIndexKey(){ return `${KP}_archive_index`; }
+function archiveItemKey(id){ return `${KP}_archive_item__${id}`; }
+
 // 최초 진입 시 서버에서 팀 공유 데이터를 불러와 state에 채우고 다시 렌더링한다.
 // (스크립트 로드 시점엔 defaultState()로 즉시 그린 뒤, 서버 응답이 오면 갱신되는 구조)
 async function loadState(){
   loadUiPrefs();
   try{
-    const [membersV, centersV, widthsV, archiveV, weekRows] = await Promise.all([
+    const [membersV, centersV, widthsV, archiveIndexV, weekRows] = await Promise.all([
       apiGet(`${KP}_members`),
       apiGet(`${KP}_centers`),
       apiGet(`${KP}_ratewidths`),
-      apiGet(`${KP}_archive`),
+      apiGet(archiveIndexKey()),
       apiList(WEEK_PREFIX)
     ]);
     if(membersV) state.members = membersV;
     if(centersV) state.centers = centersV;
     if(widthsV) state.rateColWidths = widthsV;
-    if(archiveV) state.archive = archiveV;
+    if(archiveIndexV) state.archive = archiveIndexV; // 메타데이터만(base64 없음) — 다운로드 시 개별 조회
 
     const reports = {}, aggregates = {}, monthRates = {};
     let hasAnyWeek = false;
@@ -147,14 +155,18 @@ function saveState(){
   clearTimeout(_saveTimer);
   _saveTimer = setTimeout(flushStateToServer, 300);
 }
-// 담당자/센터 "목록"과 자료보관함만 여기서 통째로 저장한다 — 이 셋은 보통 한 번에 한 사람(관리자)만
-// 손대는 데이터라 통째로 덮어써도 실질적인 충돌 위험이 낮다. 담당자 실적/계획/취합본/응대율은
-// 각자 저장 시점에 reportKey/aggKey/rateKey로 개별 저장한다(아래 각 파일 참고).
+// 담당자/센터 "목록"과 자료보관함 목록(메타데이터만)은 여기서 요청 하나로 묶어 저장한다 —
+// 이 셋은 보통 한 번에 한 사람(관리자)만 손대는 데이터라 통째로 덮어써도 실질적인 충돌
+// 위험이 낮고, 개별 요청 여러 번 대신 배치 하나로 보내면 왕복 횟수가 줄어든다. 담당자
+// 실적/계획/취합본/응대율은 각자 저장 시점에 reportKey/aggKey/rateKey로 개별 저장한다
+// (아래 각 파일 참고). 자료보관함의 실제 파일(base64)은 archiveItemKey로 따로 저장된다.
 function flushStateToServer(){
-  saveKV(`${KP}_members`, state.members);
-  saveKV(`${KP}_centers`, state.centers);
-  saveKV(`${KP}_ratewidths`, state.rateColWidths);
-  saveKV(`${KP}_archive`, state.archive);
+  apiSetMany([
+    {key:`${KP}_members`, value: state.members},
+    {key:`${KP}_centers`, value: state.centers},
+    {key:`${KP}_ratewidths`, value: state.rateColWidths},
+    {key: archiveIndexKey(), value: state.archive},
+  ]).catch(()=> flash('저장 실패: 네트워크를 확인해 주세요'));
 }
 
 function visibleMembers(){ return state.members.filter(m=>!m.hidden); }
