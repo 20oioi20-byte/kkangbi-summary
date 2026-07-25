@@ -2,7 +2,7 @@ function flushMemberDraft(){
   if(state.activeTab && String(state.activeTab).startsWith('m')){
     const pe=document.getElementById('draft-perf');
     const pl=document.getElementById('draft-plan');
-    if(pe&&pl) draftBuffers[state.activeTab]={perf:pe.value, plan:pl.value};
+    if(pe&&pl) draftBuffers[draftKey(currentMeta().weekKey, state.activeTab)]={perf:pe.value, plan:pl.value};
   }
 }
 function renderMemberPanel(memberId){
@@ -10,7 +10,7 @@ function renderMemberPanel(memberId){
   if(!m) return `<div class="empty">담당자 없음</div>`;
   const meta = currentMeta();
   const saved = memberReport(meta.weekKey, memberId) || {perf:'', plan:''};
-  const draft = draftBuffers[memberId] || {perf:saved.perf||'', plan:saved.plan||''};
+  const draft = draftBuffers[draftKey(meta.weekKey, memberId)] || {perf:saved.perf||'', plan:saved.plan||''};
 
   // 히스토리 월
   let hy, hm;
@@ -99,7 +99,9 @@ function toggleMemberHist(memberId, weekKey){
 function loadHistToDraft(memberId, weekKey){
   const r = memberReport(weekKey, memberId);
   if(!r) return;
-  draftBuffers[memberId] = {perf:r.perf||'', plan:r.plan||''};
+  // weekKey는 "불러오는 원본"(과거 주차)일 뿐, 실제로 채워 넣는 곳은 지금 보고 있는 주차다.
+  const meta = currentMeta();
+  draftBuffers[draftKey(meta.weekKey, memberId)] = {perf:r.perf||'', plan:r.plan||''};
   flash('히스토리 내용을 입력란에 불러왔습니다. 저장 버튼을 눌러 현재 주차에 반영하세요.');
   renderAll();
 }
@@ -110,7 +112,7 @@ function saveMemberDraft(memberId){
   const report = {perf, plan, savedAt:new Date().toISOString()};
   if(!state.reports[meta.weekKey]) state.reports[meta.weekKey]={};
   state.reports[meta.weekKey][memberId] = report;
-  draftBuffers[memberId] = {perf, plan};
+  draftBuffers[draftKey(meta.weekKey, memberId)] = {perf, plan};
   // 이 담당자 몫의 키에만 쓴다 — 다른 담당자 데이터는 건드리지 않음(동시 저장 시 서로 덮어쓰지 않도록)
   saveKV(reportKey(meta.weekKey, memberId), report);
   flash(`${memberById(memberId).name} · ${meta.fullLabel} 저장 완료`);

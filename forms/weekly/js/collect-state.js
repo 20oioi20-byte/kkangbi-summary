@@ -45,7 +45,12 @@ function defaultState(){
 }
 let state = defaultState();
 let anchorDate = new Date(); // 기준일 (주의 아무 날)
+// 담당자 탭의 "아직 저장 안 한 입력중" 내용을 잠깐 들고 있는 버퍼.
+// 반드시 주차별로 구분해야 한다 — memberId로만 구분하면, 이번 주에 쓰던 내용이
+// 다음 주로 넘어가도 그대로 남아있다가 다음 주 내용을 고칠 때 그 주 것인 척 저장되면서
+// 이전 주 데이터까지 덮어써버리는 사고가 난다(2026-07-25).
 let draftBuffers = {};
+function draftKey(weekKey, memberId){ return `${weekKey}__${memberId}`; }
 let expandedHist = {}; // memberId -> weekKey set
 
 // ── 화면 전용 상태(페이지 등) — 팀원마다 다를 수 있어 서버로 보내지 않고 브라우저에만 둔다.
