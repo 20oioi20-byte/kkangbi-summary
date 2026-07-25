@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>주간보고 취합 · 사업5팀</title>
+<link rel="stylesheet" href="css/collect.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="topbar">
+    <b>깡비서 · 주간보고 취합</b>
+    <span>사업5팀 · 로컬 저장</span>
+  </div>
+  <h1>AICC사업5팀 주간보고 취합</h1>
+  <p class="sub"><b>메인</b>은 현황·취합 전용 · 작성은 <b>담당자 탭</b> · 응대율은 <b>응대율 탭</b> · 저장본은 <b>자료보관함</b></p>
+
+  <div class="week-bar">
+    <label>기준 주차</label>
+    <button class="nav-btn" type="button" onclick="shiftWeek(-1)" title="이전 주">‹</button>
+    <div style="text-align:center">
+      <div class="wk-label" id="weekLabel">—</div>
+      <div class="wk-range" id="weekRange">—</div>
+    </div>
+    <button class="nav-btn" type="button" onclick="shiftWeek(1)" title="다음 주">›</button>
+    <input type="date" id="weekDate" onchange="onWeekDateChange()" style="border:1px solid #bbb;border-radius:5px;padding:6px 8px;font-size:12.5px;font-family:inherit;">
+    <span style="flex:1"></span>
+    <button class="btn btn-outline btn-sm" onclick="exportAllJson()">데이터 백업</button>
+    <label class="btn btn-outline btn-sm" style="cursor:pointer;margin:0;">복원
+      <input type="file" accept="application/json" style="display:none" onchange="importAllJson(event)">
+    </label>
+  </div>
+
+  <div class="tabs" id="tabs"></div>
+  <div id="panels"></div>
+</div>
+<div class="status-toast" id="toast"></div>
+
+<!--
+  스크립트 로드 순서 (docs/COLLECT-CODEMAP.md 참고 — 도메인별 파일만 열어서 작업할 것)
+  1) 날짜/주차 계산   2) 상태·스토리지·공용헬퍼   3) 워드 작성규칙 엔진   4) 로고 데이터
+  5) DOCX 생성        6) 메인 탭   7) 담당자 탭   8) 응대율 탭   9) 자료보관함 탭
+  10) 관리 탭          11) 앱 셸(탭 전환·렌더링·초기화) — 항상 마지막
+-->
+<script src="js/collect-dates.js"></script>
+<script src="js/collect-state.js"></script>
+<script src="js/collect-docword-rules.js"></script>
+<script src="js/collect-logo-data.js"></script>
+<script src="js/collect-docx-export.js"></script>
+<script src="js/collect-main-panel.js"></script>
+<script src="js/collect-member-panel.js"></script>
+<script src="js/collect-rate-panel.js"></script>
+<script src="js/collect-archive-panel.js"></script>
+<script src="js/collect-manage-panel.js"></script>
+<script src="js/collect-app.js"></script>
+</body>
+</html>
