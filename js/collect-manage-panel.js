@@ -97,9 +97,11 @@ function deleteCenter(id){
   state.centers=state.centers.filter(x=>x.id!==id);
   saveState(); flash('삭제됨'); renderAll();
 }
-function resetAllData(){
-  if(!confirm('전체 초기화할까요? (보관함 포함)')) return;
-  localStorage.removeItem(STORE_KEY);
+async function resetAllData(){
+  if(!confirm('전체 초기화할까요? (보관함 포함, 팀원 전체에게 반영됩니다)')) return;
+  const weekKeys = new Set([...Object.keys(state.reports||{}), ...Object.keys(state.aggregates||{})]);
+  const keys = [`${KP}_members`, `${KP}_centers`, `${KP}_ratewidths`, `${KP}_archive`, ...[...weekKeys].map(weekDataKey)];
+  await Promise.all(keys.map(apiDelete));
   state=defaultState(); draftBuffers={}; expandedHist={};
   flash('초기화 완료'); refreshWeekChrome(); renderAll();
 }

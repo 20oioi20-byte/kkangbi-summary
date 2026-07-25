@@ -1,6 +1,7 @@
-const STORE_KEY = 'kkangbi_weekly_collect_v3';
 const ARCHIVE_MAX = 30;
 const ARCHIVE_PAGE = 10;
+const UI_KEY = 'kkangbi_collect_ui_v1'; // 화면 전용(탭/페이지) — 팀원 간 공유 안 함, 브라우저 로컬
+const KP = 'ktis_v11__collect';
 const DEFAULT_MEMBERS = [
   {id:'m1', name:'강성호', hidden:false},
   {id:'m2', name:'이신영', hidden:false},
@@ -30,7 +31,7 @@ function defaultState(){
   return {
     members: JSON.parse(JSON.stringify(DEFAULT_MEMBERS)),
     centers: JSON.parse(JSON.stringify(DEFAULT_CENTERS)),
-    reports: JSON.parse(JSON.stringify(SEED_REPORTS)),
+    reports: {},
     // monthRates[YYYY-MM][centerId] = { w1,w2,w3,w4,w5, monthly, note, monthlyManual:bool }
     monthRates: {},
     aggregates: {}, // weekKey -> {perfRaw, planRaw, perfHtml, planHtml, linesPerf, linesPlan, savedAt}
@@ -42,21 +43,119 @@ function defaultState(){
     rateColWidths: {order:26, pm:64, cname:190, avg:62, wk1:56, wk2:56, wk3:56, wk4:56, wk5:56, reason:170, del:40}
   };
 }
-let state = loadState();
+let state = defaultState();
 let anchorDate = new Date(); // 기준일 (주의 아무 날)
 let draftBuffers = {};
 let expandedHist = {}; // memberId -> weekKey set
-function loadState(){
+
+// ── 화면 전용 상태(탭/페이지) — 팀원마다 다를 수 있어 서버로 보내지 않고 브라우저에만 둔다 ──
+function loadUiPrefs(){
   try{
-    const raw = localStorage.getItem(STORE_KEY);
-    if(!raw) return defaultState();
-    return Object.assign(defaultState(), JSON.parse(raw));
-  }catch(e){ return defaultState(); }
+    const raw = localStorage.getItem(UI_KEY);
+    if(!raw) return;
+    const ui = JSON.parse(raw);
+    if(ui.activeTab) state.activeTab = ui.activeTab;
+    if(ui.archivePage) state.archivePage = ui.archivePage;
+    if(ui.memberHistMonth) state.memberHistMonth = ui.memberHistMonth;
+  }catch(e){}
 }
+function saveUiPrefs(){
+  try{
+    localStorage.setItem(UI_KEY, JSON.stringify({
+      activeTab: state.activeTab, archivePage: state.archivePage, memberHistMonth: state.memberHistMonth
+    }));
+  }catch(e){}
+}
+
+// ── /api/collect-storage 경유 Supabase(rpt_kv) 접근 ──
+function weekDataKey(weekKey){ return `${KP}__${weekKey}`; }
+async function apiGet(key){
+  const r = await fetch(`/api/collect-storage?action=get&key=${encodeURIComponent(key)}`);
+  if(!r.ok) return null;
+  const d = await r.json();
+  return d.value ? JSON.parse(d.value) : null;
+}
+async function apiList(prefix){
+  const r = await fetch(`/api/collect-storage?action=list&prefix=${encodeURIComponent(prefix)}`);
+  if(!r.ok) return [];
+  const d = await r.json();
+  return d.rows || [];
+}
+async function apiSet(key, value){
+  try{
+    const r = await fetch('/api/collect-storage', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({action:'set', key, value: JSON.stringify(value)})
+    });
+    if(!r.ok) throw new Error('save failed');
+  }catch(e){ flash('저장 실패: 네트워크를 확인해 주세요'); }
+}
+async function apiDelete(key){
+  try{
+    await fetch('/api/collect-storage', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({action:'delete', key})
+    });
+  }catch(e){}
+}
+
+// 최초 진입 시 서버에서 팀 공유 데이터를 불러와 state에 채우고 다시 렌더링한다.
+// (스크립트 로드 시점엔 defaultState()로 즉시 그린 뒤, 서버 응답이 오면 갱신되는 구조)
+async function loadState(){
+  loadUiPrefs();
+  try{
+    const [membersV, centersV, widthsV, archiveV, weekRows] = await Promise.all([
+      apiGet(`${KP}_members`),
+      apiGet(`${KP}_centers`),
+      apiGet(`${KP}_ratewidths`),
+      apiGet(`${KP}_archive`),
+      apiList(weekDataKey(''))
+    ]);
+    if(membersV) state.members = membersV;
+    if(centersV) state.centers = centersV;
+    if(widthsV) state.rateColWidths = widthsV;
+    if(archiveV) state.archive = archiveV;
+
+    const reports = {}, aggregates = {};
+    let hasAnyWeek = false;
+    weekRows.forEach(row=>{
+      const wk = row.key.slice(weekDataKey('').length);
+      if(!wk) return;
+      hasAnyWeek = true;
+      try{
+        const wv = JSON.parse(row.value);
+        if(wv.reports) reports[wk] = wv.reports;
+        if(wv.aggregate) aggregates[wk] = wv.aggregate;
+      }catch(e){}
+    });
+    state.reports = hasAnyWeek ? reports : JSON.parse(JSON.stringify(SEED_REPORTS));
+    state.aggregates = aggregates;
+  }catch(e){
+    flash('서버 데이터를 불러오지 못했습니다. 네트워크를 확인해 주세요');
+    state.reports = JSON.parse(JSON.stringify(SEED_REPORTS));
+  }
+  if(typeof renderAll === 'function') renderAll();
+}
+
+let _saveTimer = null;
 function saveState(){
-  try{ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
-  catch(e){ flash('저장 공간 부족: 자료보관함 일부를 삭제해 주세요'); }
+  saveUiPrefs();
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(flushStateToServer, 300);
 }
+function flushStateToServer(){
+  apiSet(`${KP}_members`, state.members);
+  apiSet(`${KP}_centers`, state.centers);
+  apiSet(`${KP}_ratewidths`, state.rateColWidths);
+  apiSet(`${KP}_archive`, state.archive);
+  const weekKeys = new Set([...Object.keys(state.reports||{}), ...Object.keys(state.aggregates||{})]);
+  weekKeys.forEach(wk=>{
+    apiSet(weekDataKey(wk), { reports: state.reports[wk]||{}, aggregate: state.aggregates[wk]||null });
+  });
+}
+
 function visibleMembers(){ return state.members.filter(m=>!m.hidden); }
 function memberById(id){ return state.members.find(m=>m.id===id); }
 function centerById(id){ return state.centers.find(c=>c.id===id); }
@@ -93,3 +192,5 @@ function flash(msg){
   t.textContent=msg; t.classList.add('show');
   setTimeout(()=>t.classList.remove('show'), 2600);
 }
+
+loadState(); // 서버(Supabase) 데이터 비동기 로드 시작 — 완료되면 내부에서 renderAll() 재호출
