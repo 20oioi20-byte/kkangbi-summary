@@ -26,12 +26,14 @@ function renderTabs(){
 function onWeekDateChange(){
   const v = document.getElementById('weekDate').value;
   if(!v) return;
+  flushMemberDraft();
   flushFinalEditNow();
   anchorDate = new Date(v+'T00:00:00');
   refreshWeekChrome();
   renderAll();
 }
 function shiftWeek(delta){
+  flushMemberDraft();
   flushFinalEditNow();
   const {year, month, week} = findWeekOfMonth(anchorDate);
   let entry = {year, month, week};
@@ -53,7 +55,11 @@ function refreshWeekChrome(){
   document.getElementById('weekDate').value = fmtISO(meta.mon);
 }
 function renderAll(){
-  flushMemberDraft();
+  // 주의: 여기서 flushMemberDraft()를 부르지 않는다. renderAll()이 호출되는 시점엔
+  // state.activeTab이 이미 "다음" 탭으로 바뀌어 있는 경우가 많아서(예: switchTab),
+  // 그때 DOM에 아직 남아있는 "이전" 탭의 입력값을 새 탭 담당자 것으로 잘못 저장해버리는
+  // 사고가 났었다(2026-07-25). 초안을 남겨야 하는 곳(switchTab, shiftWeek 등)은
+  // activeTab을 바꾸기 전에 각자 flushMemberDraft()를 직접 호출한다.
   renderTabs();
   // 응대율 탭은 월 단위(자체 월 이동 컨트롤)라 상단 "기준 주차" 네비게이션은 의미가 없어 숨긴다 —
   // 두 개의 날짜 이동 UI가 동시에 보여서 헷갈리는 것을 방지.

@@ -86,6 +86,7 @@ function shiftMemberHistMonth(delta){
   if(m>12){ m=1; y++; }
   state.memberHistMonth = {y,m};
   saveState();
+  flushMemberDraft(); // 입력 draft 보존 (activeTab은 그대로라 안전)
   renderAll();
 }
 function toggleMemberHist(memberId, weekKey){
