@@ -41,9 +41,25 @@ function renderManagePanel(){
     </div>
   </div>
   <div class="card">
+    <h2>🔒 화면 비밀번호 변경</h2>
+    <p class="hint">팀 전체가 공유하는 화면 잠금 비밀번호입니다. 잊어버려도 초기 비밀번호 <b>000000</b>으로는 언제나 입장할 수 있습니다.</p>
+    <div class="inline-form">
+      <div class="fld grow"><span>새 비밀번호</span><input id="newLockPw" placeholder="새 비밀번호"></div>
+      <button class="btn btn-primary" onclick="changeLockPw()">변경</button>
+    </div>
+  </div>
+  <div class="card">
     <h2>⚠️ 데이터 초기화</h2>
     <button class="btn btn-danger" onclick="resetAllData()">샘플 상태로 초기화</button>
   </div>`;
+}
+async function changeLockPw(){
+  const input = document.getElementById('newLockPw');
+  const pw = (input && input.value || '').trim();
+  if(!pw){ flash('새 비밀번호를 입력하세요'); return; }
+  await apiSet(`${KP}_pw`, pw);
+  if(input) input.value = '';
+  flash('비밀번호가 변경되었습니다 (000000은 계속 예비 비밀번호로 사용 가능)');
 }
 function saveMemberEdits(){
   document.querySelectorAll('.mgmt-row[data-mid]').forEach(row=>{

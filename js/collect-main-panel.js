@@ -78,7 +78,7 @@ function renderMainPanel(){
       </div>
       <div class="doc-actions">
         <button class="btn btn-primary" onclick="doAggregate()">🔗 담당자 내용 전체 취합</button>
-        <button class="btn btn-green" onclick="saveWordAndArchive()">💾 워드 저장 (양식 다운로드 + 보관함)</button>
+        <button class="btn btn-green btn-2line" onclick="saveWordAndArchive()">💾 워드저장<br><span class="btn-sub">(양식다운로드+보관함)</span></button>
         <button class="btn btn-outline" onclick="downloadRateExcel()">⬇ 응대율 엑셀</button>
       </div>
     </div>

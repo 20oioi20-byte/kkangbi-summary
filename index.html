@@ -10,10 +10,21 @@
 </head>
 <body>
 
+<div class="lock-screen" id="lockScreen">
+  <div class="lock-box">
+    <div class="lock-title">깡비서 · 주간보고 취합</div>
+    <div class="lock-sub">비밀번호를 입력하세요</div>
+    <input type="password" id="lockPwInput" class="lock-input" placeholder="비밀번호" autocomplete="off" inputmode="numeric">
+    <button type="button" class="btn btn-primary lock-btn" onclick="tryUnlock()">입장</button>
+    <div class="lock-err" id="lockErr"></div>
+    <div class="lock-hint">비밀번호를 잊으셨나요?<br><b>000000</b>으로 입장한 뒤 관리 탭에서 바꿀 수 있습니다.</div>
+  </div>
+</div>
+
 <div class="wrap">
   <div class="topbar">
     <b>깡비서 · 주간보고 취합</b>
-    <span>사업5팀 · 로컬 저장</span>
+    <span>사업5팀 · 팀 공유 저장</span>
   </div>
   <h1>AICC사업5팀 주간보고 취합</h1>
   <p class="sub"><b>메인</b>은 현황·취합 전용 · 작성은 <b>담당자 탭</b> · 응대율은 <b>응대율 탭</b> · 저장본은 <b>자료보관함</b></p>
@@ -41,12 +52,13 @@
 
 <!--
   스크립트 로드 순서 (docs/COLLECT-CODEMAP.md 참고 — 도메인별 파일만 열어서 작업할 것)
-  1) 날짜/주차 계산   2) 상태·스토리지·공용헬퍼   3) 워드 작성규칙 엔진   4) 로고 데이터
-  5) DOCX 생성        6) 메인 탭   7) 담당자 탭   8) 응대율 탭   9) 자료보관함 탭
-  10) 관리 탭          11) 앱 셸(탭 전환·렌더링·초기화) — 항상 마지막
+  1) 날짜/주차 계산   2) 상태·스토리지·공용헬퍼   3) 화면 잠금(비밀번호)   4) 워드 작성규칙 엔진
+  5) 로고 데이터      6) DOCX 생성   7) 메인 탭   8) 담당자 탭   9) 응대율 탭   10) 자료보관함 탭
+  11) 관리 탭          12) 앱 셸(탭 전환·렌더링·초기화) — 항상 마지막
 -->
 <script src="js/collect-dates.js"></script>
 <script src="js/collect-state.js"></script>
+<script src="js/collect-auth.js"></script>
 <script src="js/collect-docword-rules.js"></script>
 <script src="js/collect-logo-data.js"></script>
 <script src="js/collect-docx-export.js"></script>
