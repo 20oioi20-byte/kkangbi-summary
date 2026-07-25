@@ -40,7 +40,7 @@ function defaultState(){
     archivePage: 1,
     memberHistMonth: null, // {y,m} for member tab history nav
     // 응대율 표 컬럼 너비(px) — 사용자가 드래그로 조절한 값을 그대로 유지
-    rateColWidths: {order:26, pm:64, cname:190, avg:62, wk1:56, wk2:56, wk3:56, wk4:56, wk5:56, reason:170, del:40}
+    rateColWidths: {order:26, pm:64, cname:190, avg:62, wk1:56, wk2:56, wk3:56, wk4:56, wk5:56, reason:170, del:58}
   };
 }
 let state = defaultState();

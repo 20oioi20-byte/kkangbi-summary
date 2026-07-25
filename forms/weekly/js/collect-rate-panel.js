@@ -9,7 +9,9 @@ function renderRatePanel(){
   if(!state.monthRates[monthKey]) state.monthRates[monthKey]={};
 
   // 정렬하지 않음 — state.centers 배열 순서 그대로(사용자가 순서 변경 버튼으로 직접 관리)
-  const centers = visibleCenters();
+  // 종료된 센터는 삭제 대신 숨기기를 쓰므로, "숨긴 센터도 보기"를 켜면 과거 자료 확인을 위해 함께 보여준다.
+  const showHidden = !!state._rateShowHidden;
+  const centers = showHidden ? state.centers : visibleCenters();
 
   // 헤더: 주차 5칸 고정 (없으면 빈 주)
   const weekCols = [1,2,3,4,5].map(i=>{
@@ -38,7 +40,7 @@ function renderRatePanel(){
       <td class="wk-col"><span class="pct-wrap"><input type="text" inputmode="decimal" data-cid="${c.id}" data-f="w${w.i}"
         value="${escapeHtml(row['w'+w.i]??'')}" ${w.exists?'':'disabled'}
         onchange="onRateCellChange('${monthKey}','${c.id}','w${w.i}',this.value); renderAll();"></span></td>`).join('');
-    return `<tr>
+    return `<tr class="${c.hidden?'hidden-row':''}">
       <td class="order-cell">
         <div class="order-cell-inner">
           <button class="ord-btn" type="button" onclick="moveCenter('${c.id}',-1)" ${idx===0?'disabled':''} title="위로">▲</button>
@@ -46,7 +48,7 @@ function renderRatePanel(){
         </div>
       </td>
       <td class="pm"><select data-cid="${c.id}" onchange="updateCenterField('${c.id}','owner',this.value)">${memberOptions(c.ownerId)}</select></td>
-      <td class="cname"><input type="text" value="${escapeHtml(c.name)}" onchange="updateCenterField('${c.id}','name',this.value)"></td>
+      <td class="cname">${c.hidden?'<span class="hidden-badge" title="숨김 처리된 센터(과거 자료 열람용)">숨김</span>':''}<input type="text" value="${escapeHtml(c.name)}" onchange="updateCenterField('${c.id}','name',this.value)"></td>
       <td class="avg-col"><span class="pct-wrap"><input class="auto" type="text" inputmode="decimal" title="주차별 평균 자동 / 직접 수정 가능"
         value="${escapeHtml(String(monthly??''))}"
         onchange="onRateCellChange('${monthKey}','${c.id}','monthly',this.value,true); renderAll();"></span></td>
@@ -54,7 +56,12 @@ function renderRatePanel(){
       <td class="note-cell"><input class="note-in" type="text" title="${escapeHtml(row.note||'')}"
         value="${escapeHtml(row.note||'')}"
         onchange="onRateCellChange('${monthKey}','${c.id}','note',this.value); this.title=this.value;"></td>
-      <td class="del-cell"><button class="btn-link" style="color:#a33;" onclick="deleteCenterInline('${c.id}')">삭제</button></td>
+      <td class="del-cell">
+        <div class="del-cell-inner">
+          <button class="btn-link" onclick="toggleCenterHide('${c.id}')">${c.hidden?'표시':'숨기기'}</button>
+          <button class="btn-link" style="color:#a33;" onclick="deleteCenterInline('${c.id}')">삭제</button>
+        </div>
+      </td>
     </tr>`;
   }).join('');
 
@@ -86,8 +93,12 @@ function renderRatePanel(){
     <p class="hint">
       숫자만 입력해도 %가 자동으로 붙습니다. 표 안에서 <b>담당자·센터명을 바로 수정</b>하고, <b>▲▼</b>로 순서를 변경하고, <b>+ 센터 추가</b>로 새 줄을 만들 수 있습니다.<br>
       <b>컬럼 경계선에 마우스를 올려 드래그하면 폭을 직접 조절</b>할 수 있습니다. 비고칸은 내용이 길면 …으로 줄여 표시되며, 클릭하면 전체 내용이 펼쳐집니다.
-      각 주차 <b>복사</b> 버튼 → 센터 순서대로 값이 줄바꿈 복사됩니다. 엑셀 A1에 붙여넣으면 A1, A2, A3…에 순서대로 들어갑니다.
+      각 주차 <b>복사</b> 버튼 → 센터 순서대로 값이 줄바꿈 복사됩니다. 엑셀 A1에 붙여넣으면 A1, A2, A3…에 순서대로 들어갑니다.<br>
+      센터가 종료됐다면 <b>삭제 대신 숨기기</b>를 눌러주세요 — 지난 응대율 기록이 그대로 남고, 아래 체크박스로 언제든 다시 볼 수 있습니다.
     </p>
+    <label class="show-hidden-toggle">
+      <input type="checkbox" ${showHidden?'checked':''} onchange="toggleRateShowHidden(this.checked)"> 숨긴 센터도 보기 (과거 자료 확인용)
+    </label>
     <div class="rate-wrap">
       <table class="rate-matrix" id="rateMatrixTable">
         ${colgroupHtml}
@@ -98,7 +109,7 @@ function renderRatePanel(){
             <th rowspan="2">센터명${rez('cname')}</th>
             <th class="top-title" colspan="6">${escapeHtml(monthShort)} 응대율</th>
             <th rowspan="2" class="reason-col">목표대비 미달사유 및 개선계획<br>(특이사항 포함)${rez('reason')}</th>
-            <th rowspan="2"></th>
+            <th rowspan="2">관리${rez('del')}</th>
           </tr>
           <tr>
             <th>${rm}월${rez('avg')}</th>
@@ -166,9 +177,13 @@ function updateCenterField(id, field, value){
   saveState();
   renderAll();
 }
+function toggleRateShowHidden(checked){
+  state._rateShowHidden = checked;
+  renderAll();
+}
 function deleteCenterInline(id){
   const c = centerById(id); if(!c) return;
-  if(!confirm(`「${c.name}」 센터를 삭제할까요?`)) return;
+  if(!confirm(`「${c.name}」 센터를 삭제할까요?\n지난 응대율 기록도 화면에서 더 이상 보이지 않게 됩니다.\n나중에 과거 자료를 다시 볼 수 있으려면 삭제 대신 "숨기기"를 눌러주세요.`)) return;
   state.centers = state.centers.filter(x=>x.id!==id);
   saveState();
   flash('센터가 삭제되었습니다');
