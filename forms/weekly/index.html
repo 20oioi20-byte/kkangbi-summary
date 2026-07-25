@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>주간보고 취합 · 사업5팀</title>
+<link rel="stylesheet" href="../../shared/base.css">
+<link rel="stylesheet" href="css/weekly.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+
+<div class="lock-screen" id="lockScreen">
+  <div class="lock-box">
+    <div class="lock-title">깡비서 · 주간보고 취합</div>
+    <div class="lock-sub">비밀번호를 입력하세요</div>
+    <input type="password" id="lockPwInput" class="lock-input" placeholder="비밀번호" autocomplete="off" inputmode="numeric">
+    <button type="button" class="btn btn-primary lock-btn" onclick="tryUnlock()">입장</button>
+    <div class="lock-err" id="lockErr"></div>
+    <div class="lock-hint">비밀번호를 잊으셨나요?<br><b>000000</b>으로 입장한 뒤 관리 탭에서 바꿀 수 있습니다.</div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="topbar">
+    <b>깡비서 · 주간보고 취합</b>
+    <span><a href="../../" style="color:#555;text-decoration:underline;">허브 홈</a> · 사업5팀 · 팀 공유 저장</span>
+  </div>
+  <h1>AICC사업5팀 주간보고 취합</h1>
+  <p class="sub"><b>메인</b>은 현황·취합 전용 · 작성은 <b>담당자 탭</b> · 응대율은 <b>응대율 탭</b> · 저장본은 <b>자료보관함</b></p>
+
+  <div class="week-bar">
+    <label>기준 주차</label>
+    <button class="nav-btn" type="button" onclick="shiftWeek(-1)" title="이전 주">‹</button>
+    <div style="text-align:center">
+      <div class="wk-label" id="weekLabel">—</div>
+      <div class="wk-range" id="weekRange">—</div>
+    </div>
+    <button class="nav-btn" type="button" onclick="shiftWeek(1)" title="다음 주">›</button>
+    <input type="date" id="weekDate" onchange="onWeekDateChange()" style="border:1px solid #bbb;border-radius:5px;padding:6px 8px;font-size:12.5px;font-family:inherit;">
+    <span style="flex:1"></span>
+    <button class="btn btn-outline btn-sm" onclick="exportAllJson()">데이터 백업</button>
+    <label class="btn btn-outline btn-sm" style="cursor:pointer;margin:0;">복원
+      <input type="file" accept="application/json" style="display:none" onchange="importAllJson(event)">
+    </label>
+  </div>
+
+  <div class="tabs" id="tabs"></div>
+  <div id="panels"></div>
+</div>
+<div class="status-toast" id="toast"></div>
+
+<!--
+  스크립트 로드 순서 (forms/weekly/docs/CODEMAP.md 참고 — 도메인별 파일만 열어서 작업할 것)
+  1) 공용 KV 클라이언트   2) 공용 화면잠금   3) 날짜/주차 계산   4) 상태·스토리지·공용헬퍼
+  5) 공용 로고 데이터      6) 워드 작성규칙 엔진   7) DOCX 생성   8) 메인 탭   9) 담당자 탭
+  10) 응대율 탭   11) 자료보관함 탭   12) 관리 탭   13) 앱 셸(탭 전환·렌더링·초기화) — 항상 마지막
+-->
+<script src="../../shared/kv-client.js"></script>
+<script src="../../shared/auth.js"></script>
+<script src="js/collect-dates.js"></script>
+<script src="js/collect-state.js"></script>
+<script src="../../shared/logo-data.js"></script>
+<script src="js/collect-docword-rules.js"></script>
+<script src="js/collect-docx-export.js"></script>
+<script src="js/collect-main-panel.js"></script>
+<script src="js/collect-member-panel.js"></script>
+<script src="js/collect-rate-panel.js"></script>
+<script src="js/collect-archive-panel.js"></script>
+<script src="js/collect-manage-panel.js"></script>
+<script src="js/collect-app.js"></script>
+</body>
+</html>

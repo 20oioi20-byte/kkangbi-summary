@@ -1,8 +1,10 @@
 // Supabase 프록시 — 반드시 rpt_kv 사용 (app_storage 금지: 회사망 POST 차단)
 // service_role 키로만 접근 (rpt_kv는 RLS로 anon 접근 차단됨). 키는 Vercel 환경변수로만 주입.
+// 허브의 모든 양식(주간보고/Makeup/향후 추가되는 양식)이 이 엔드포인트 하나를 공유한다 —
+// 양식별로 별도 API를 만들지 않고, 키 접두어(ktis_v11__{formSlug}_*)로만 구분한다.
 const SB_URL = process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const KEY_PREFIX = 'ktis_v11__collect';
+const KEY_PREFIX = 'ktis_v11__';
 
 function isAllowedKey(key) {
   return typeof key === 'string' && key.startsWith(KEY_PREFIX);

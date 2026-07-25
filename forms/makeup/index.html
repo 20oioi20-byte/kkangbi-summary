@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Make up 계획 관리 · 사업5팀</title>
+<link rel="stylesheet" href="../../shared/base.css">
+<link rel="stylesheet" href="css/makeup.css">
+</head>
+<body>
+
+<div class="lock-screen" id="lockScreen">
+  <div class="lock-box">
+    <div class="lock-title">깡비서 · Make up 계획 관리</div>
+    <div class="lock-sub">비밀번호를 입력하세요</div>
+    <input type="password" id="lockPwInput" class="lock-input" placeholder="비밀번호" autocomplete="off" inputmode="numeric">
+    <button type="button" class="btn btn-primary lock-btn" onclick="tryUnlock()">입장</button>
+    <div class="lock-err" id="lockErr"></div>
+    <div class="lock-hint">비밀번호를 잊으셨나요?<br><b>000000</b>으로 입장한 뒤 다른 양식의 관리 탭에서 바꿀 수 있습니다.</div>
+  </div>
+</div>
+
+<div id="app">
+  <div class="topbar">
+    <div>
+      <h1>AICC사업2단 사업5팀 Make up 계획 관리</h1>
+      <div class="sub"><a href="../../">허브 홈</a> · 매달 스냅샷으로 저장 · 새 달을 추가하면 직전 달 내용이 자동으로 복사됩니다</div>
+    </div>
+    <div class="month-controls">
+      <button class="arrow-btn" id="btnPrevMonth" title="이전 달">◀</button>
+      <select id="monthSelect"></select>
+      <button class="arrow-btn" id="btnNextMonth" title="다음 달">▶</button>
+
+      <div class="new-month-wrap">
+        <button class="btn" id="btnNewMonth">+ 새 달 추가</button>
+        <div class="new-month-pop" id="newMonthPanel">
+          <label>새 기준월</label>
+          <div class="row"><input type="month" id="newMonthInput" style="flex:1;"></div>
+          <div class="hint">현재 보고 있는 달의 항목이 새 달에 그대로 복사됩니다.</div>
+          <div class="actions">
+            <button class="btn btn-sm" id="btnCancelNewMonth">취소</button>
+            <button class="btn btn-primary btn-sm" id="btnCreateMonth">만들기</button>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn btn-danger" id="btnDeleteMonth">이 달 삭제</button>
+      <button class="btn btn-save-all" id="btnSaveAll" title="현재 표의 모든 변경사항을 지금 저장합니다">💾 전체 저장</button>
+      <button class="btn" id="btnCopyAll" title="표 전체(모든 열/행)를 복사해서 엑셀에 붙여넣을 수 있습니다">📋 표 전체 복사</button>
+      <button class="btn" id="btnExport">엑셀 내보내기</button>
+    </div>
+  </div>
+
+  <div class="sheet">
+    <div class="warn-banner" id="warnBanner"></div>
+    <div class="sheet-title-row">
+      <div class="sheet-title" id="sheetTitle">AICC사업2단 사업5팀 Make up 계획</div>
+      <div class="sheet-unit">(단위 : 원)</div>
+    </div>
+    <div class="sheet-note">
+      연간증가 기본값 = <b>월 값 × (13 − 반영시기)</b> 자동계산 · 자동산식 칸은 직접 수정 가능하며, 수정 후 <b>↺</b> 버튼으로 다시 자동계산으로 되돌릴 수 있습니다.
+      · 각 열 제목의 <b>복사</b>는 그 열만, 상단의 <b>표 전체 복사</b>는 모든 열/행을 한 번에 복사합니다.
+      · 표 제목 테두리를 마우스로 드래그하면 열 간격을 조절할 수 있습니다.
+    </div>
+
+    <div class="table-wrap">
+      <table id="planTable">
+        <colgroup>
+          <col id="col-no"><col id="col-center"><col id="col-bm"><col id="col-plan">
+          <col id="col-month"><col id="col-revenue"><col id="col-profit">
+          <col id="col-revenueAnnual"><col id="col-profitAnnual"><col id="col-note"><col id="col-actions">
+        </colgroup>
+        <thead>
+          <tr>
+            <th class="col-write">번호<span class="col-resizer" data-col="no"></span></th>
+            <th class="col-write">센터명
+              <button class="th-copy-btn" data-col="center" title="열 전체 복사">복사</button>
+              <span class="col-resizer" data-col="center"></span>
+            </th>
+            <th class="col-write">BM
+              <button class="th-copy-btn" data-col="bm" title="열 전체 복사">복사</button>
+              <span class="col-resizer" data-col="bm"></span>
+            </th>
+            <th class="col-write">
+              <span class="th-label">make up 계획<br>(매출/이익 해당사항 작성)</span>
+              <button class="th-copy-btn" data-col="plan" title="열 전체 복사">복사</button>
+              <span class="col-resizer" data-col="plan"></span>
+            </th>
+            <th class="col-write">
+              <span class="th-label">반영시기<br>(실적반영월)</span>
+              <button class="th-copy-btn" data-col="month" title="열 전체 복사">복사</button>
+              <span class="col-resizer" data-col="month"></span>
+            </th>
+            <th class="col-write">
+              <span class="th-label">make up 매출<br>(월기준)</span>
+              <button class="th-copy-btn" data-col="revenue" title="열 전체 복사">복사</button>
+              <span class="col-resizer" data-col="revenue"></span>
+            </th>
+            <th class="col-write">
+              <span class="th-label">make up 이익<br>(월기준)</span>
+              <button class="th-copy-btn" data-col="profit" title="열 전체 복사">복사</button>
+              <span class="col-resizer" data-col="profit"></span>
+            </th>
+            <th class="col-auto">
+              <span class="th-label">매출연간<br>증가</span>
+              <button class="th-copy-btn" data-col="revenueAnnual" title="열 전체 복사">복사</button>
+              <span class="col-resizer" data-col="revenueAnnual"></span>
+            </th>
+            <th class="col-auto">
+              <span class="th-label">이익연간<br>증가</span>
+              <button class="th-copy-btn" data-col="profitAnnual" title="열 전체 복사">복사</button>
+              <span class="col-resizer" data-col="profitAnnual"></span>
+            </th>
+            <th class="col-plain">
+              비고
+              <button class="th-copy-btn" data-col="note" title="열 전체 복사">복사</button>
+              <span class="col-resizer" data-col="note"></span>
+            </th>
+            <th class="col-plain">관리</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+        <tfoot>
+          <tr>
+            <td colspan="5" class="label">합계</td>
+            <td id="sumRevenue">0</td>
+            <td id="sumProfit">0</td>
+            <td id="sumRevenueAnnual">0</td>
+            <td id="sumProfitAnnual">0</td>
+            <td colspan="2"></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    <div id="emptyState" class="empty-state" style="display:none;">
+      저장된 달이 없습니다. 상단의 "+ 새 달 추가"로 시작하세요.
+    </div>
+
+    <div class="add-row-bar">
+      <button class="btn btn-primary btn-sm" id="btnAddRow">+ 항목 추가</button>
+      <span style="font-size:11.5px;color:#888;" id="rowCount"></span>
+    </div>
+  </div>
+
+  <div class="footer-status">
+    <span id="statusMsg"></span>
+    <span>기준: KTIS AICC사업2단 사업5팀 · Make up 달성계획 원본 양식 기반</span>
+  </div>
+</div>
+
+<!--
+  스크립트 로드 순서 (forms/makeup/docs/CODEMAP.md 참고)
+  1) 공용 KV 클라이언트   2) 공용 화면잠금   3) ExcelJS(외부 라이브러리)   4) 이 양식 로직(항상 마지막)
+-->
+<script src="../../shared/kv-client.js"></script>
+<script src="../../shared/auth.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js"></script>
+<script src="js/makeup-app.js"></script>
+</body>
+</html>

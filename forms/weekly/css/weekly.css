@@ -1,5 +1,5 @@
-*{box-sizing:border-box;}
-  body{margin:0;background:#e9e9ec;color:#1a1a1a;font-family:'Malgun Gothic',-apple-system,sans-serif;}
+/* box-sizing 리셋, body 기본 폰트/배경, .btn 기본 모양, .card, .badge, .status-toast, .lock-screen*
+   은 shared/base.css에 있음 — 이 파일은 주간보고 전용 스타일만 담는다. */
   .wrap{max-width:1180px;margin:0 auto;padding:18px 14px 80px;}
   .topbar{display:flex;justify-content:space-between;align-items:center;padding:0 2px 12px;margin-bottom:12px;border-bottom:2px solid #333;}
   .topbar b{font-size:14px;} .topbar span{font-size:12px;color:#555;}
@@ -32,20 +32,11 @@
   .tab .dot.ok{background:#2a8;} .tab .dot.no{background:#d66;} .tab .dot.part{background:#e8a020;}
 
   .panel{display:none;} .panel.active{display:block;}
-  .card{background:#fff;border:1px solid #ccc;border-radius:8px;padding:14px 16px;margin-bottom:14px;}
-  .card h2{font-size:14px;margin:0 0 6px;}
-  .card h3{font-size:13px;margin:14px 0 8px;}
-  .hint{font-size:11.5px;color:#777;margin:0 0 12px;line-height:1.45;}
-  .hint b{color:#a33;}
 
   table.status-tbl{width:100%;border-collapse:collapse;font-size:12.5px;}
   table.status-tbl th,table.status-tbl td{border:1px solid #ccc;padding:9px 10px;text-align:center;}
   table.status-tbl th{background:#404040;color:#fff;font-weight:700;}
   table.status-tbl td.name{text-align:left;font-weight:700;background:#fafafa;}
-  .badge{display:inline-block;padding:3px 8px;border-radius:10px;font-size:11px;font-weight:700;}
-  .badge.done{background:#e6f7ee;color:#1a7a45;}
-  .badge.todo{background:#fdecec;color:#a33;}
-  .badge.partial{background:#fff4e0;color:#a66a00;}
   .btn-link{border:none;background:none;color:#1a4a8a;font-weight:700;cursor:pointer;font-size:12px;text-decoration:underline;font-family:inherit;}
 
   .doc-card{position:relative;}
@@ -77,14 +68,11 @@
     padding:10px;font-size:13px;font-family:inherit;resize:vertical;line-height:1.55;}
   textarea.input-area:focus{outline:2px solid #8ab;border-color:#8ab;}
   .form-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;}
-  .btn{border:none;border-radius:6px;padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;}
   .btn-primary{background:#222;color:#fff;} .btn-primary:hover{background:#000;}
   .btn-green{background:#1d7a4c;color:#fff;} .btn-green:hover{background:#155e3a;}
   .btn-outline{background:#fff;border:1px solid #999;color:#333;}
   .btn-outline:hover{background:#f5f5f5;}
   .btn-danger{background:#fff;border:1px solid #d66;color:#a33;}
-  .btn-sm{padding:5px 9px;font-size:11.5px;}
-  .btn:disabled{opacity:.45;cursor:not-allowed;}
   .btn-2line{line-height:1.4;padding-top:8px;padding-bottom:8px;}
   .btn-2line .btn-sub{font-size:10.5px;font-weight:500;opacity:.85;}
 
@@ -178,24 +166,6 @@
   .arch-item .m{font-size:11.5px;color:#666;margin-top:2px;}
   .pager{display:flex;gap:8px;align-items:center;justify-content:center;margin-top:12px;}
   .pager span{font-size:12.5px;font-weight:700;}
-
-  .status-toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);
-    background:#222;color:#fff;padding:11px 22px;border-radius:6px;font-size:13px;display:none;z-index:60;max-width:90%;text-align:center;}
-  .status-toast.show{display:block;}
-
-  /* 화면 잠금(팀 공용 비밀번호) */
-  .lock-screen{position:fixed;inset:0;z-index:999;background:#1a1a1a;
-    display:flex;align-items:center;justify-content:center;padding:20px;}
-  .lock-screen.hidden{display:none;}
-  .lock-box{background:#fff;border-radius:12px;padding:28px 24px;width:100%;max-width:320px;text-align:center;}
-  .lock-title{font-size:15px;font-weight:800;margin-bottom:4px;}
-  .lock-sub{font-size:12.5px;color:#666;margin-bottom:16px;}
-  .lock-input{width:100%;border:1px solid #ccc;border-radius:6px;padding:12px;font-size:16px;
-    font-family:inherit;text-align:center;letter-spacing:2px;margin-bottom:10px;}
-  .lock-input:focus{outline:2px solid #8ab;border-color:#8ab;}
-  .lock-btn{width:100%;padding:12px;font-size:14px;}
-  .lock-hint{font-size:11px;color:#888;margin-top:14px;line-height:1.5;}
-  .lock-err{font-size:12px;color:#a33;margin-top:10px;min-height:16px;}
 
   @media(max-width:700px){
     .tabs{gap:4px;} .tab{padding:6px 10px;font-size:11.5px;}

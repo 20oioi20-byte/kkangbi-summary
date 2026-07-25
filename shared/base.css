@@ -1,0 +1,38 @@
+/* 모든 양식이 공유하는 최소 공통 토큰. 색상 변형(.btn-primary 등)은 넣지 않는다 —
+   양식마다 팔레트가 달라도 되는 부분이라 각 양식 자체 CSS에 둔다.
+   여기 있는 건 "구조/모양"만 공통이면 되는 것들. */
+*{box-sizing:border-box;}
+body{margin:0;background:#e9e9ec;color:#1a1a1a;font-family:'Malgun Gothic','맑은 고딕',-apple-system,sans-serif;}
+
+.btn{border:none;border-radius:6px;padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;}
+.btn:disabled{opacity:.45;cursor:not-allowed;}
+.btn-sm{padding:5px 9px;font-size:11.5px;}
+
+.card{background:#fff;border:1px solid #ccc;border-radius:8px;padding:14px 16px;margin-bottom:14px;}
+.card h2{font-size:14px;margin:0 0 6px;}
+.card h3{font-size:13px;margin:14px 0 8px;}
+.hint{font-size:11.5px;color:#777;margin:0 0 12px;line-height:1.45;}
+.hint b{color:#a33;}
+
+.badge{display:inline-block;padding:3px 8px;border-radius:10px;font-size:11px;font-weight:700;}
+.badge.done{background:#e6f7ee;color:#1a7a45;}
+.badge.todo{background:#fdecec;color:#a33;}
+.badge.partial{background:#fff4e0;color:#a66a00;}
+
+.status-toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);
+  background:#222;color:#fff;padding:11px 22px;border-radius:6px;font-size:13px;display:none;z-index:60;max-width:90%;text-align:center;}
+.status-toast.show{display:block;}
+
+/* 화면 잠금(팀 공용 비밀번호) — shared/auth.js가 이 클래스들을 조작한다 */
+.lock-screen{position:fixed;inset:0;z-index:999;background:#1a1a1a;
+  display:flex;align-items:center;justify-content:center;padding:20px;}
+.lock-screen.hidden{display:none;}
+.lock-box{background:#fff;border-radius:12px;padding:28px 24px;width:100%;max-width:320px;text-align:center;}
+.lock-title{font-size:15px;font-weight:800;margin-bottom:4px;}
+.lock-sub{font-size:12.5px;color:#666;margin-bottom:16px;}
+.lock-input{width:100%;border:1px solid #ccc;border-radius:6px;padding:12px;font-size:16px;
+  font-family:inherit;text-align:center;letter-spacing:2px;margin-bottom:10px;}
+.lock-input:focus{outline:2px solid #8ab;border-color:#8ab;}
+.lock-btn{width:100%;padding:12px;font-size:14px;}
+.lock-hint{font-size:11px;color:#888;margin-top:14px;line-height:1.5;}
+.lock-err{font-size:12px;color:#a33;margin-top:10px;min-height:16px;}

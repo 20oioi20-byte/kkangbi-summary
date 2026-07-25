@@ -1,8 +1,10 @@
 // 화면 잠금(팀 공용 비밀번호) — 진짜 보안이 아니라 "아무나 화면에 들어오지 못하게" 하는
-// 가벼운 게이트. 서버에 저장된 비밀번호(ktis_v11__collect_pw)와 비교하고,
-// 잊어버렸을 때를 위해 초기값 000000은 항상 예비 비밀번호로 동작한다.
-const LOCK_PW_KEY = `${KP}_pw`;
-const LOCK_UNLOCKED_KEY = 'kkangbi_collect_unlocked_v1';
+// 가벼운 게이트. 허브 전체가 비밀번호 하나를 공유한다(양식별로 따로 묻지 않음).
+// 서버에 저장된 비밀번호(ktis_v11__hub_pw)와 비교하고, 잊어버렸을 때를 위해
+// 초기값 000000은 항상 예비 비밀번호로 동작한다.
+// 의존: shared/kv-client.js(apiGet) — 이 스크립트보다 먼저 로드돼 있어야 한다.
+const LOCK_PW_KEY = 'ktis_v11__hub_pw';
+const LOCK_UNLOCKED_KEY = 'kkangbi_hub_unlocked_v1';
 const LOCK_MASTER_PW = '000000';
 
 function isLockUnlocked(){ return localStorage.getItem(LOCK_UNLOCKED_KEY) === '1'; }
@@ -29,6 +31,9 @@ async function tryUnlock(){
   } else {
     setLockError('비밀번호가 올바르지 않습니다');
   }
+}
+async function changeHubPw(newPw){
+  await apiSet(LOCK_PW_KEY, newPw);
 }
 
 (function initLockScreen(){

@@ -1,7 +1,7 @@
 const ARCHIVE_MAX = 30;
 const ARCHIVE_PAGE = 10;
-const UI_KEY = 'kkangbi_collect_ui_v1'; // 화면 전용(탭/페이지) — 팀원 간 공유 안 함, 브라우저 로컬
-const KP = 'ktis_v11__collect';
+const UI_KEY = 'kkangbi_weekly_ui_v1'; // 화면 전용(탭/페이지) — 팀원 간 공유 안 함, 브라우저 로컬
+const KP = 'ktis_v11__weekly';
 const DEFAULT_MEMBERS = [
   {id:'m1', name:'강성호', hidden:false},
   {id:'m2', name:'이신영', hidden:false},
@@ -67,38 +67,10 @@ function saveUiPrefs(){
   }catch(e){}
 }
 
-// ── /api/collect-storage 경유 Supabase(rpt_kv) 접근 ──
+// apiGet/apiSet/apiList/apiDelete 는 shared/kv-client.js 제공 (index.html에서 이 파일보다 먼저 로드).
 function weekDataKey(weekKey){ return `${KP}__${weekKey}`; }
-async function apiGet(key){
-  const r = await fetch(`/api/collect-storage?action=get&key=${encodeURIComponent(key)}`);
-  if(!r.ok) return null;
-  const d = await r.json();
-  return d.value ? JSON.parse(d.value) : null;
-}
-async function apiList(prefix){
-  const r = await fetch(`/api/collect-storage?action=list&prefix=${encodeURIComponent(prefix)}`);
-  if(!r.ok) return [];
-  const d = await r.json();
-  return d.rows || [];
-}
-async function apiSet(key, value){
-  try{
-    const r = await fetch('/api/collect-storage', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({action:'set', key, value: JSON.stringify(value)})
-    });
-    if(!r.ok) throw new Error('save failed');
-  }catch(e){ flash('저장 실패: 네트워크를 확인해 주세요'); }
-}
-async function apiDelete(key){
-  try{
-    await fetch('/api/collect-storage', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({action:'delete', key})
-    });
-  }catch(e){}
+function saveKV(key, value){
+  apiSet(key, value).catch(()=> flash('저장 실패: 네트워크를 확인해 주세요'));
 }
 
 // 최초 진입 시 서버에서 팀 공유 데이터를 불러와 state에 채우고 다시 렌더링한다.
@@ -146,13 +118,13 @@ function saveState(){
   _saveTimer = setTimeout(flushStateToServer, 300);
 }
 function flushStateToServer(){
-  apiSet(`${KP}_members`, state.members);
-  apiSet(`${KP}_centers`, state.centers);
-  apiSet(`${KP}_ratewidths`, state.rateColWidths);
-  apiSet(`${KP}_archive`, state.archive);
+  saveKV(`${KP}_members`, state.members);
+  saveKV(`${KP}_centers`, state.centers);
+  saveKV(`${KP}_ratewidths`, state.rateColWidths);
+  saveKV(`${KP}_archive`, state.archive);
   const weekKeys = new Set([...Object.keys(state.reports||{}), ...Object.keys(state.aggregates||{})]);
   weekKeys.forEach(wk=>{
-    apiSet(weekDataKey(wk), { reports: state.reports[wk]||{}, aggregate: state.aggregates[wk]||null });
+    saveKV(weekDataKey(wk), { reports: state.reports[wk]||{}, aggregate: state.aggregates[wk]||null });
   });
 }
 
