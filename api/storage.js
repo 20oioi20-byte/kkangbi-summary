@@ -36,7 +36,7 @@ export default async function handler(req, res) {
         const r = await sbFetch(
           `/rest/v1/rpt_kv?key=like.${encodeURIComponent(prefix)}*&select=key,value`
         );
-        if (!r.ok) return res.status(502).json({ error: 'supabase list failed' });
+        if (!r.ok) return res.status(502).json({ error: 'supabase list failed', supabaseStatus: r.status, supabaseBody: await r.text() });
         const rows = await r.json();
         return res.status(200).json({ rows });
       }
@@ -46,7 +46,7 @@ export default async function handler(req, res) {
       const r = await sbFetch(
         `/rest/v1/rpt_kv?key=eq.${encodeURIComponent(key)}&select=value`
       );
-      if (!r.ok) return res.status(502).json({ error: 'supabase get failed' });
+      if (!r.ok) return res.status(502).json({ error: 'supabase get failed', supabaseStatus: r.status, supabaseBody: await r.text() });
       const rows = await r.json();
       return res.status(200).json({ value: rows[0] ? rows[0].value : null });
     }
@@ -59,7 +59,8 @@ export default async function handler(req, res) {
         const r = await sbFetch(`/rest/v1/rpt_kv?key=eq.${encodeURIComponent(key)}`, {
           method: 'DELETE',
         });
-        return res.status(r.ok ? 200 : 502).json({ ok: r.ok });
+        if (!r.ok) return res.status(502).json({ error: 'supabase delete failed', supabaseStatus: r.status, supabaseBody: await r.text() });
+        return res.status(200).json({ ok: true });
       }
 
       // action === 'set' (default)
@@ -72,7 +73,8 @@ export default async function handler(req, res) {
           updated_at: new Date().toISOString(),
         }),
       });
-      return res.status(r.ok ? 200 : 502).json({ ok: r.ok });
+      if (!r.ok) return res.status(502).json({ error: 'supabase set failed', supabaseStatus: r.status, supabaseBody: await r.text() });
+      return res.status(200).json({ ok: true });
     }
 
     res.status(405).json({ error: 'Method not allowed' });
