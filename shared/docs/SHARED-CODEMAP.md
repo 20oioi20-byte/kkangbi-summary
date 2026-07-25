@@ -5,7 +5,7 @@
 
 | 파일 | 역할 | 함수/내용 |
 |---|---|---|
-| `kv-client.js` | `/api/storage` 호출 래퍼 | `apiGet(key)`, `apiSet(key, value)`, `apiList(prefix)`, `apiDelete(key)` |
+| `kv-client.js` | `/api/storage` 호출 래퍼 — **회사망 내성 저장 프로토콜 내장** | `apiGet/apiSet/apiList/apiDelete` (기존 시그니처 그대로) + `apiSetMany/apiDeleteMany`(배치). 값이 크면 자동 청크 분할, 실패하면 크기를 스스로 줄여가며 재시도, 바닥까지 줄여도 안 되면 백오프 재시도. 실패 확정 전 서버 재조회로 오탐 방지. 자세한 설계 근거는 `docs/HUB-CODEMAP.md` §5 및 `~/dev-standards/network-resilient-storage.md` 참고 |
 | `auth.js` | 허브 공용 화면 잠금(비밀번호) | `tryUnlock()`, `changeHubPw(newPw)` — 비밀번호는 `ktis_v11__hub_pw` 키, 기본/예비값 `000000`. 통과하면 같은 브라우저에 24시간 동안 재질문 안 함(`LOCK_UNLOCKED_TTL_MS`) |
 | `logo-data.js` | kt is 로고 base64 | 전역 `KT_LOGO_DATAURI` — 로고 교체 외엔 절대 열지 않음 |
 | `base.css` | 버튼 기본 모양, 카드, 배지, 토스트, 잠금화면 스타일 | **색상 변형은 넣지 않는다** — `.btn-primary` 등 색은 각 양식 CSS에 |
@@ -16,6 +16,14 @@
 - "비밀번호 규칙을 바꿔달라"(예: 마스터 비번 제거, 자릿수 제한 등) → `auth.js`
 - 저장 API 엔드포인트/키 검증 로직을 바꿔달라 → `kv-client.js` + `api/storage.js` (둘 다 짝으로 확인)
 - "모든 양식 버튼 모서리를 더 둥글게" 같은 진짜 전역 스타일 요청 → `base.css`
+- 새 양식이 **큰 값(첨부파일 등)을 저장**해야 한다 → `kv-client.js`를 손댈 필요 없음(자동으로 청크 처리됨). 다만 "배열 전체를 한 키에" 저장하는 패턴은 절대 새로 만들지 말 것(§ 아래)
+
+## 저장 관련 원칙 — 새 양식에도 반드시 적용
+
+- **엔티티 1건 = 저장 키 1개.** "목록 전체를 배열째로 한 키에" 저장하지 않는다(자료보관함이 이걸 어겨서 실제 사고 위험이 됐던 사례 — `forms/weekly/docs/CODEMAP.md` §5 참고). 목록에는 메타데이터만, 큰 본문(첨부파일 등)은 항목별 키로.
+- `apiSet`이 `.catch()`나 `throw`로 실패를 알려오면 **절대 무시하지 않는다** — 조용히 삼키면 사용자가 "저장했는데 사라졌다"를 겪는다.
+- 여러 항목을 한 번에 저장할 땐 개별 `apiSet` 반복 대신 `apiSetMany([{key,value}, ...])`를 쓴다(요청 왕복 줄이고 다발 요청 패턴 감지 회피).
+- `kv-client.js`가 알아낸 "안전한 크기"(`kkangbi_kv_safe_size_v1`, localStorage)는 허브 전체가 공유한다 — 양식마다 따로 두지 않는다.
 
 ## 이 파일들을 열면 안 되는 경우
 

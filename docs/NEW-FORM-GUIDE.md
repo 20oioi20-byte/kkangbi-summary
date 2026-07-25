@@ -45,6 +45,7 @@ Claude는 이 문서만 보고도 아래를 바로 이해한다:
 | `rpt_kv`는 RLS가 걸려 있어 **service_role 키로만 접근 가능** → 클라이언트가 직접 Supabase를 호출하지 않고 **반드시 `/api/storage` 서버 프록시를 경유** (허브 전체 양식 공용 — 양식마다 새 API 만들지 않는다) | anon key로 직접 접근 시 `42501` 오류로 즉시 실패 |
 | `/api/storage` 등 데이터 API는 로그인 세션 토큰이 필요 (`apiFetch()` 래퍼 사용) | 회사 데이터 무단 접근 방지 |
 | 대용량 데이터(첨부파일 base64, 로고 등)는 **전용 키/전용 파일로 분리** | 설정 묶음 전체가 실패하는 것을 방지 (탭아이콘을 별도 키로 뺀 사례와 동일 원칙) |
+| **"목록/이력 전체를 배열째로 한 키에" 저장하지 않는다 — 엔티티 1건 = 저장 키 1개** | 데이터가 쌓일수록(첨부파일, 이력 등) 페이로드가 커져 회사망 payload 크기 차단에 걸림. `shared/kv-client.js`(`apiGet/apiSet/apiList/apiDelete/apiSetMany/apiDeleteMany`)가 청크 분할·적응형 크기·백오프 재시도를 이미 내장하고 있으니 그대로 쓰면 됨(직접 구현 금지) — 자세한 원칙은 `~/dev-standards/network-resilient-storage.md`와 `shared/docs/SHARED-CODEMAP.md` 참고 |
 
 ### 3.2 팀원 입력 보안 원칙 (이번 프로젝트에서 확정)
 - 팀원이 받는 제출 링크는 **추측 불가능한 개인 토큰**을 포함 (`/collect/{요청ID}-{개인토큰}`)

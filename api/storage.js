@@ -52,7 +52,40 @@ export default async function handler(req, res) {
     }
 
     if (req.method === 'POST') {
-      const { action, key, value } = req.body || {};
+      const { action, key, value, items, keys } = req.body || {};
+
+      if (action === 'setMany') {
+        const list = Array.isArray(items) ? items : [];
+        if (!list.length) return res.status(400).json({ error: 'no items' });
+        for (const it of list) {
+          if (!isAllowedKey(it && it.key)) return res.status(400).json({ error: 'invalid key: ' + (it && it.key) });
+        }
+        const rows = list.map(it => ({
+          key: it.key,
+          value: typeof it.value === 'string' ? it.value : JSON.stringify(it.value),
+          updated_at: new Date().toISOString(),
+        }));
+        const r = await sbFetch(`/rest/v1/rpt_kv`, {
+          method: 'POST',
+          headers: { Prefer: 'resolution=merge-duplicates' },
+          body: JSON.stringify(rows),
+        });
+        if (!r.ok) return res.status(502).json({ error: 'supabase setMany failed', supabaseStatus: r.status, supabaseBody: await r.text() });
+        return res.status(200).json({ ok: true, count: rows.length });
+      }
+
+      if (action === 'deleteMany') {
+        const list = Array.isArray(keys) ? keys : [];
+        if (!list.length) return res.status(400).json({ error: 'no keys' });
+        for (const k of list) {
+          if (!isAllowedKey(k)) return res.status(400).json({ error: 'invalid key: ' + k });
+        }
+        const inList = list.map(k => `"${String(k).replace(/"/g, '\\"')}"`).join(',');
+        const r = await sbFetch(`/rest/v1/rpt_kv?key=in.(${inList})`, { method: 'DELETE' });
+        if (!r.ok) return res.status(502).json({ error: 'supabase deleteMany failed', supabaseStatus: r.status, supabaseBody: await r.text() });
+        return res.status(200).json({ ok: true });
+      }
+
       if (!isAllowedKey(key || '')) return res.status(400).json({ error: 'invalid key' });
 
       if (action === 'delete') {
