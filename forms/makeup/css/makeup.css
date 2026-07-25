@@ -105,10 +105,7 @@ tbody tr.new-row{animation:flashNew 1.4s ease-out;}
 @keyframes flashNew{from{background:#e3f0ff;}to{background:transparent;}}
 
 .row-actions{display:flex;gap:4px;justify-content:center;}
-.save-row-btn, .del-btn{border:none;background:transparent;cursor:pointer;font-size:14px;line-height:1;padding:4px;}
-.save-row-btn{color:#2f5597;}
-.save-row-btn:hover{color:#1c3a6b;}
-.del-btn{color:#b00020;font-size:15px;}
+.del-btn{border:none;background:transparent;cursor:pointer;font-size:15px;line-height:1;padding:4px;color:#b00020;}
 .del-btn:hover{color:#ff0000;}
 
 tfoot td{background:var(--gray-bg);font-weight:700;text-align:right;border-top:2px solid var(--border-strong);}

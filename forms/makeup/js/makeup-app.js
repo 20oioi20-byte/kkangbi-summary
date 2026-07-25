@@ -255,7 +255,6 @@
         </td>
         <td class="center">
           <div class="row-actions">
-            <button class="save-row-btn" title="지금 저장 (표 전체 기준)">💾</button>
             <button class="del-btn" title="행 삭제">✕</button>
           </div>
         </td>
@@ -322,13 +321,6 @@
       memoBtn.addEventListener('click', ()=>{
         if(openMemoIds.has(r.id)) openMemoIds.delete(r.id); else openMemoIds.add(r.id);
         renderRows();
-      });
-
-      const saveRowBtn = tr.querySelector('.save-row-btn');
-      saveRowBtn.addEventListener('click', async ()=>{
-        await commitCurrent();
-        saveRowBtn.textContent = '✅';
-        setTimeout(()=>{ saveRowBtn.textContent = '💾'; }, 1200);
       });
 
       const delBtn = tr.querySelector('.del-btn');
