@@ -23,21 +23,26 @@
 
 <div class="wrap">
   <div class="topbar">
-    <b>깡비서 · 주간보고 취합</b>
-    <span><a href="../../" style="color:#555;text-decoration:underline;">허브 홈</a> · 사업5팀 · 팀 공유 저장</span>
+    <div class="topbar-left">
+      <a href="../../" class="hub-home-link">🏠 허브 홈</a>
+      <b>깡비서 · 주간보고 취합</b>
+    </div>
+    <span>사업5팀 · 팀 공유 저장</span>
   </div>
   <h1>AICC사업5팀 주간보고 취합</h1>
   <p class="sub"><b>메인</b>은 현황·취합 전용 · 작성은 <b>담당자 탭</b> · 응대율은 <b>응대율 탭</b> · 저장본은 <b>자료보관함</b></p>
 
   <div class="week-bar">
-    <label>기준 주차</label>
-    <button class="nav-btn" type="button" onclick="shiftWeek(-1)" title="이전 주">‹</button>
-    <div style="text-align:center">
-      <div class="wk-label" id="weekLabel">—</div>
-      <div class="wk-range" id="weekRange">—</div>
+    <div class="week-nav-group" id="weekNavGroup">
+      <label>기준 주차</label>
+      <button class="nav-btn" type="button" onclick="shiftWeek(-1)" title="이전 주">‹</button>
+      <div style="text-align:center">
+        <div class="wk-label" id="weekLabel">—</div>
+        <div class="wk-range" id="weekRange">—</div>
+      </div>
+      <button class="nav-btn" type="button" onclick="shiftWeek(1)" title="다음 주">›</button>
+      <input type="date" id="weekDate" onchange="onWeekDateChange()" style="border:1px solid #bbb;border-radius:5px;padding:6px 8px;font-size:12.5px;font-family:inherit;">
     </div>
-    <button class="nav-btn" type="button" onclick="shiftWeek(1)" title="다음 주">›</button>
-    <input type="date" id="weekDate" onchange="onWeekDateChange()" style="border:1px solid #bbb;border-radius:5px;padding:6px 8px;font-size:12.5px;font-family:inherit;">
     <span style="flex:1"></span>
     <button class="btn btn-outline btn-sm" onclick="exportAllJson()">데이터 백업</button>
     <label class="btn btn-outline btn-sm" style="cursor:pointer;margin:0;">복원

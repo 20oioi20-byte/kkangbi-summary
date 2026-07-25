@@ -2,12 +2,14 @@
    은 shared/base.css에 있음 — 이 파일은 주간보고 전용 스타일만 담는다. */
   .wrap{max-width:1180px;margin:0 auto;padding:18px 14px 80px;}
   .topbar{display:flex;justify-content:space-between;align-items:center;padding:0 2px 12px;margin-bottom:12px;border-bottom:2px solid #333;}
+  .topbar-left{display:flex;align-items:center;gap:10px;}
   .topbar b{font-size:14px;} .topbar span{font-size:12px;color:#555;}
   h1{font-size:18px;margin:0 0 4px;}
   .sub{color:#555;font-size:12.5px;margin:0 0 14px;line-height:1.5;}
 
   .week-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:14px;
     background:#fff;border:1px solid #ccc;border-radius:8px;padding:10px 12px;}
+  .week-nav-group{display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
   .week-bar label{font-size:12px;font-weight:700;color:#444;}
   .nav-btn{width:36px;height:36px;border:1px solid #bbb;border-radius:8px;background:#f7f7f7;
     font-size:18px;font-weight:700;cursor:pointer;line-height:1;font-family:inherit;}

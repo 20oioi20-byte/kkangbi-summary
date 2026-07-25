@@ -55,6 +55,10 @@ function refreshWeekChrome(){
 function renderAll(){
   flushMemberDraft();
   renderTabs();
+  // 응대율 탭은 월 단위(자체 월 이동 컨트롤)라 상단 "기준 주차" 네비게이션은 의미가 없어 숨긴다 —
+  // 두 개의 날짜 이동 UI가 동시에 보여서 헷갈리는 것을 방지.
+  const weekNavGroup = document.getElementById('weekNavGroup');
+  if(weekNavGroup) weekNavGroup.style.display = (state.activeTab==='rate') ? 'none' : 'flex';
   const panels=document.getElementById('panels');
   let html='';
   html += `<div class="panel ${state.activeTab==='main'?'active':''}">${state.activeTab==='main'?renderMainPanel():''}</div>`;

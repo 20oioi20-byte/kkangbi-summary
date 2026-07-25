@@ -48,13 +48,13 @@ let anchorDate = new Date(); // 기준일 (주의 아무 날)
 let draftBuffers = {};
 let expandedHist = {}; // memberId -> weekKey set
 
-// ── 화면 전용 상태(탭/페이지) — 팀원마다 다를 수 있어 서버로 보내지 않고 브라우저에만 둔다 ──
+// ── 화면 전용 상태(페이지 등) — 팀원마다 다를 수 있어 서버로 보내지 않고 브라우저에만 둔다.
+// activeTab(현재 탭)은 일부러 기억하지 않는다 — 들어올 때마다 항상 "메인 취합" 탭부터 보여준다. ──
 function loadUiPrefs(){
   try{
     const raw = localStorage.getItem(UI_KEY);
     if(!raw) return;
     const ui = JSON.parse(raw);
-    if(ui.activeTab) state.activeTab = ui.activeTab;
     if(ui.archivePage) state.archivePage = ui.archivePage;
     if(ui.memberHistMonth) state.memberHistMonth = ui.memberHistMonth;
   }catch(e){}
@@ -62,7 +62,7 @@ function loadUiPrefs(){
 function saveUiPrefs(){
   try{
     localStorage.setItem(UI_KEY, JSON.stringify({
-      activeTab: state.activeTab, archivePage: state.archivePage, memberHistMonth: state.memberHistMonth
+      archivePage: state.archivePage, memberHistMonth: state.memberHistMonth
     }));
   }catch(e){}
 }
