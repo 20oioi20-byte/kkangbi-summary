@@ -68,7 +68,16 @@ function saveUiPrefs(){
 }
 
 // apiGet/apiSet/apiList/apiDelete 는 shared/kv-client.js 제공 (index.html에서 이 파일보다 먼저 로드).
-function weekDataKey(weekKey){ return `${KP}__${weekKey}`; }
+//
+// 담당자별 실적/계획, 취합본, 응대율은 팀원 여러 명이 동시에 서로 다른 항목을 저장할 수 있으므로
+// "주차 전체를 하나의 키로 통째로 저장"하면 안 된다 — A가 저장할 때 그 시점에 A의 브라우저가
+// 갖고 있던 B/C의 (오래됐을 수 있는) 데이터까지 같이 덮어써서, A가 자기 것만 고쳤는데 다른 담당자
+// 내용까지 바뀌어 보이는 문제가 생긴다. 그래서 담당자/취합본/응대율은 각각 "본인 몫의 키"에만
+// 쓰고, 그 키를 쓰는 사람은 항상 그 담당자 자신(또는 취합 작업 중인 사람)뿐이도록 한다.
+const WEEK_PREFIX = `${KP}__`; // ktis_v11__weekly__
+function reportKey(weekKey, memberId){ return `${WEEK_PREFIX}rpt__${weekKey}__${memberId}`; }
+function aggKey(weekKey){ return `${WEEK_PREFIX}agg__${weekKey}`; }
+function rateKey(monthKey, centerId){ return `${WEEK_PREFIX}rate__${monthKey}__${centerId}`; }
 function saveKV(key, value){
   apiSet(key, value).catch(()=> flash('저장 실패: 네트워크를 확인해 주세요'));
 }
@@ -83,27 +92,43 @@ async function loadState(){
       apiGet(`${KP}_centers`),
       apiGet(`${KP}_ratewidths`),
       apiGet(`${KP}_archive`),
-      apiList(weekDataKey(''))
+      apiList(WEEK_PREFIX)
     ]);
     if(membersV) state.members = membersV;
     if(centersV) state.centers = centersV;
     if(widthsV) state.rateColWidths = widthsV;
     if(archiveV) state.archive = archiveV;
 
-    const reports = {}, aggregates = {};
+    const reports = {}, aggregates = {}, monthRates = {};
     let hasAnyWeek = false;
     weekRows.forEach(row=>{
-      const wk = row.key.slice(weekDataKey('').length);
-      if(!wk) return;
-      hasAnyWeek = true;
-      try{
-        const wv = JSON.parse(row.value);
-        if(wv.reports) reports[wk] = wv.reports;
-        if(wv.aggregate) aggregates[wk] = wv.aggregate;
-      }catch(e){}
+      const rest = row.key.slice(WEEK_PREFIX.length); // "rpt__2026-07-W4__m1" / "agg__2026-07-W4" / "rate__2026-07__c3"
+      const tagSep = rest.indexOf('__');
+      if(tagSep < 0) return;
+      const tag = rest.slice(0, tagSep);
+      const remainder = rest.slice(tagSep+2);
+      let val;
+      try{ val = JSON.parse(row.value); }catch(e){ return; }
+      if(tag === 'rpt'){
+        const sep = remainder.lastIndexOf('__');
+        if(sep < 0) return;
+        const wk = remainder.slice(0, sep), memberId = remainder.slice(sep+2);
+        hasAnyWeek = true;
+        if(!reports[wk]) reports[wk] = {};
+        reports[wk][memberId] = val;
+      } else if(tag === 'agg'){
+        aggregates[remainder] = val; // remainder === weekKey
+      } else if(tag === 'rate'){
+        const sep = remainder.lastIndexOf('__');
+        if(sep < 0) return;
+        const mk = remainder.slice(0, sep), centerId = remainder.slice(sep+2);
+        if(!monthRates[mk]) monthRates[mk] = {};
+        monthRates[mk][centerId] = val;
+      }
     });
     state.reports = hasAnyWeek ? reports : JSON.parse(JSON.stringify(SEED_REPORTS));
     state.aggregates = aggregates;
+    state.monthRates = monthRates;
   }catch(e){
     flash('서버 데이터를 불러오지 못했습니다. 네트워크를 확인해 주세요');
     state.reports = JSON.parse(JSON.stringify(SEED_REPORTS));
@@ -117,15 +142,14 @@ function saveState(){
   clearTimeout(_saveTimer);
   _saveTimer = setTimeout(flushStateToServer, 300);
 }
+// 담당자/센터 "목록"과 자료보관함만 여기서 통째로 저장한다 — 이 셋은 보통 한 번에 한 사람(관리자)만
+// 손대는 데이터라 통째로 덮어써도 실질적인 충돌 위험이 낮다. 담당자 실적/계획/취합본/응대율은
+// 각자 저장 시점에 reportKey/aggKey/rateKey로 개별 저장한다(아래 각 파일 참고).
 function flushStateToServer(){
   saveKV(`${KP}_members`, state.members);
   saveKV(`${KP}_centers`, state.centers);
   saveKV(`${KP}_ratewidths`, state.rateColWidths);
   saveKV(`${KP}_archive`, state.archive);
-  const weekKeys = new Set([...Object.keys(state.reports||{}), ...Object.keys(state.aggregates||{})]);
-  weekKeys.forEach(wk=>{
-    saveKV(weekDataKey(wk), { reports: state.reports[wk]||{}, aggregate: state.aggregates[wk]||null });
-  });
 }
 
 function visibleMembers(){ return state.members.filter(m=>!m.hidden); }

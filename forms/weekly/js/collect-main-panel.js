@@ -131,7 +131,7 @@ function flushFinalEditNow(){
     agg.planRaw = docLinesToRaw(agg.linesPlan);
   }
   agg.savedAt = new Date().toISOString();
-  saveState();
+  saveKV(aggKey(meta.weekKey), agg);
 }
 function doAggregate(){
   const meta = currentMeta();
@@ -150,7 +150,7 @@ function doAggregate(){
     perfHtml, planHtml,
     savedAt: new Date().toISOString()
   };
-  saveState();
+  saveKV(aggKey(meta.weekKey), state.aggregates[meta.weekKey]);
   flash('취합 완료 — 워드 작성규칙 반영');
   renderAll();
 }

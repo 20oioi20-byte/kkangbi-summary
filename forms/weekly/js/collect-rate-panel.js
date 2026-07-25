@@ -224,7 +224,8 @@ function onRateCellChange(monthKey, cid, field, value, isMonthly){
       row.monthly = vals.length ? String(Math.round(vals.reduce((a,b)=>a+b,0)/vals.length*10)/10) : '';
     }
   }
-  saveState();
+  // 이 센터 몫의 키에만 쓴다 — 다른 센터를 담당하는 PM이 동시에 입력해도 서로 덮어쓰지 않도록
+  saveKV(rateKey(monthKey, cid), row);
 }
 function saveRateMonth(){
   // input onchange already saves; force re-read DOM for safety
@@ -232,6 +233,7 @@ function saveRateMonth(){
   const ry = state._rateMonth?.y ?? meta.year;
   const rm = state._rateMonth?.m ?? meta.month;
   const monthKey = `${ry}-${pad2(rm)}`;
+  const touchedCids = new Set();
   document.querySelectorAll('.rate-matrix input[data-cid]').forEach(inp=>{
     const cid = inp.getAttribute('data-cid');
     const f = inp.getAttribute('data-f');
@@ -239,8 +241,9 @@ function saveRateMonth(){
     if(!state.monthRates[monthKey]) state.monthRates[monthKey]={};
     if(!state.monthRates[monthKey][cid]) state.monthRates[monthKey][cid]={};
     state.monthRates[monthKey][cid][f] = String(inp.value??'').replace('%','').trim();
+    touchedCids.add(cid);
   });
-  saveState();
+  touchedCids.forEach(cid=> saveKV(rateKey(monthKey, cid), state.monthRates[monthKey][cid]));
   flash(`${ry}년 ${rm}월 응대율 저장 완료 · 값은 계속 유지됩니다`);
   renderAll();
 }

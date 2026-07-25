@@ -115,8 +115,9 @@ function deleteCenter(id){
 }
 async function resetAllData(){
   if(!confirm('전체 초기화할까요? (보관함 포함, 팀원 전체에게 반영됩니다)')) return;
-  const weekKeys = new Set([...Object.keys(state.reports||{}), ...Object.keys(state.aggregates||{})]);
-  const keys = [`${KP}_members`, `${KP}_centers`, `${KP}_ratewidths`, `${KP}_archive`, ...[...weekKeys].map(weekDataKey)];
+  const globalKeys = [`${KP}_members`, `${KP}_centers`, `${KP}_ratewidths`, `${KP}_archive`];
+  const weekRows = await apiList(WEEK_PREFIX); // 담당자별 실적/계획, 취합본, 응대율 전부 이 접두어 아래에 있음
+  const keys = [...globalKeys, ...weekRows.map(r=>r.key)];
   await Promise.all(keys.map(apiDelete));
   state=defaultState(); draftBuffers={}; expandedHist={};
   flash('초기화 완료'); refreshWeekChrome(); renderAll();

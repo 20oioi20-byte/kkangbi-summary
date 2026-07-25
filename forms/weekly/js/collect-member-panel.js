@@ -106,10 +106,12 @@ function saveMemberDraft(memberId){
   const perf = document.getElementById('draft-perf').value;
   const plan = document.getElementById('draft-plan').value;
   const meta = currentMeta();
+  const report = {perf, plan, savedAt:new Date().toISOString()};
   if(!state.reports[meta.weekKey]) state.reports[meta.weekKey]={};
-  state.reports[meta.weekKey][memberId] = {perf, plan, savedAt:new Date().toISOString()};
+  state.reports[meta.weekKey][memberId] = report;
   draftBuffers[memberId] = {perf, plan};
-  saveState();
+  // 이 담당자 몫의 키에만 쓴다 — 다른 담당자 데이터는 건드리지 않음(동시 저장 시 서로 덮어쓰지 않도록)
+  saveKV(reportKey(meta.weekKey, memberId), report);
   flash(`${memberById(memberId).name} · ${meta.fullLabel} 저장 완료`);
   renderAll();
 }

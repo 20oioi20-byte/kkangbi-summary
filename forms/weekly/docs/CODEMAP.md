@@ -98,14 +98,27 @@ shared/kv-client.js → shared/auth.js → collect-dates.js → collect-state.js
 
 ## 5. 저장 키 (Supabase `rpt_kv`, `api/storage.js` 경유)
 
-| 데이터 | 저장 키 |
-|---|---|
-| 담당자 목록 | `ktis_v11__weekly_members` |
-| 센터 목록 | `ktis_v11__weekly_centers` |
-| 응대율 컬럼폭 | `ktis_v11__weekly_ratewidths` |
-| 자료보관함(워드 저장본) | `ktis_v11__weekly_archive` |
-| 주차별 실적/계획/취합본 | `ktis_v11__weekly__{weekKey}` (예: `ktis_v11__weekly__2026-07-W4`) |
+**목록류(관리자 한 명이 주로 손대는 데이터)는 통째로 하나의 키**, **담당자/취합본/응대율처럼 여러 명이
+동시에 각자 다른 항목을 저장하는 데이터는 항목별로 키를 쪼갠다** — 안 그러면 A가 저장할 때 A의
+브라우저가 들고 있던 B의 (오래됐을 수 있는) 데이터까지 같이 덮어써서, A가 자기 것만 고쳤는데 B의
+내용까지 바뀌어 보이는 사고가 난다(2026-07-25 실제 발생, `collect-state.js`/`collect-member-panel.js`/
+`collect-main-panel.js`/`collect-rate-panel.js` 동시 수정으로 해결). **이 원칙을 절대 되돌리지 말 것.**
+
+| 데이터 | 저장 키 | 저장 위치(누가/언제 쓰는가) |
+|---|---|---|
+| 담당자 목록 | `ktis_v11__weekly_members` | `collect-manage-panel.js`, 통째로 저장 |
+| 센터 목록 | `ktis_v11__weekly_centers` | `collect-manage-panel.js`/`collect-rate-panel.js`, 통째로 저장 |
+| 응대율 컬럼폭 | `ktis_v11__weekly_ratewidths` | `collect-rate-panel.js`, 통째로 저장 |
+| 자료보관함(워드 저장본) | `ktis_v11__weekly_archive` | `collect-main-panel.js`, 통째로 저장 |
+| 담당자별 실적/계획 (주차 단위) | `ktis_v11__weekly__rpt__{weekKey}__{memberId}` | `collect-member-panel.js`의 `saveMemberDraft` — **이 담당자 몫만** 저장 |
+| 취합본 (주차 단위) | `ktis_v11__weekly__agg__{weekKey}` | `collect-main-panel.js`의 `flushFinalEditNow`/`doAggregate` |
+| 응대율 (센터·월 단위) | `ktis_v11__weekly__rate__{monthKey}__{centerId}` | `collect-rate-panel.js`의 `onRateCellChange`/`saveRateMonth` — **이 센터 몫만** 저장 |
 | (이 양식 것 아님) 화면 잠금 비밀번호 | `ktis_v11__hub_pw` — 허브 전체 공용, `shared/auth.js` 참고 |
+
+`collect-state.js`의 `loadState()`는 `ktis_v11__weekly__` 전체를 `apiList`로 한 번에 읽어서 접두어
+(`rpt`/`agg`/`rate`)로 구분해 `state.reports`/`state.aggregates`/`state.monthRates`에 나눠 담는다.
+새로 이런 "여러 명이 동시에 각자 다른 항목을 쓰는" 데이터를 추가할 때는 반드시 항목별 키로 설계할 것 —
+"주차/월 전체를 하나의 키로" 패턴으로 되돌아가지 않는다.
 
 화면 전용 상태(현재 탭, 자료보관함 페이지)는 서버로 보내지 않고 브라우저 `localStorage`(`kkangbi_weekly_ui_v1`)에만 둔다 — 팀원마다 다를 수 있는 값이라 공유할 필요가 없음.
 
