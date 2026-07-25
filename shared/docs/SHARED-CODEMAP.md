@@ -6,7 +6,7 @@
 | 파일 | 역할 | 함수/내용 |
 |---|---|---|
 | `kv-client.js` | `/api/storage` 호출 래퍼 | `apiGet(key)`, `apiSet(key, value)`, `apiList(prefix)`, `apiDelete(key)` |
-| `auth.js` | 허브 공용 화면 잠금(비밀번호) | `tryUnlock()`, `changeHubPw(newPw)` — 비밀번호는 `ktis_v11__hub_pw` 키, 기본/예비값 `000000` |
+| `auth.js` | 허브 공용 화면 잠금(비밀번호) | `tryUnlock()`, `changeHubPw(newPw)` — 비밀번호는 `ktis_v11__hub_pw` 키, 기본/예비값 `000000`. 통과하면 같은 브라우저에 24시간 동안 재질문 안 함(`LOCK_UNLOCKED_TTL_MS`) |
 | `logo-data.js` | kt is 로고 base64 | 전역 `KT_LOGO_DATAURI` — 로고 교체 외엔 절대 열지 않음 |
 | `base.css` | 버튼 기본 모양, 카드, 배지, 토스트, 잠금화면 스타일 | **색상 변형은 넣지 않는다** — `.btn-primary` 등 색은 각 양식 CSS에 |
 
