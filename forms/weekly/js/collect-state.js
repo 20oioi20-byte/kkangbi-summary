@@ -40,7 +40,9 @@ function defaultState(){
     archivePage: 1,
     memberHistMonth: null, // {y,m} for member tab history nav
     // 응대율 표 컬럼 너비(px) — 사용자가 드래그로 조절한 값을 그대로 유지
-    rateColWidths: {order:26, pm:64, cname:190, avg:62, wk1:56, wk2:56, wk3:56, wk4:56, wk5:56, reason:170, del:58}
+    rateColWidths: {order:26, pm:64, cname:190, avg:62, wk1:56, wk2:56, wk3:56, wk4:56, wk5:56, reason:170, del:58},
+    // 응대율 기본값 규칙: {id, centerId, startKey, endKey, sy,sm,sw,ey,em,ew, value} — collect-rate-panel.js 참고
+    rateDefaults: []
   };
 }
 let state = defaultState();
@@ -100,17 +102,19 @@ function archiveItemKey(id){ return `${KP}_archive_item__${id}`; }
 async function loadState(){
   loadUiPrefs();
   try{
-    const [membersV, centersV, widthsV, archiveIndexV, weekRows] = await Promise.all([
+    const [membersV, centersV, widthsV, archiveIndexV, rateDefaultsV, weekRows] = await Promise.all([
       apiGet(`${KP}_members`),
       apiGet(`${KP}_centers`),
       apiGet(`${KP}_ratewidths`),
       apiGet(archiveIndexKey()),
+      apiGet(`${KP}_ratedefaults`),
       apiList(WEEK_PREFIX)
     ]);
     if(membersV) state.members = membersV;
     if(centersV) state.centers = centersV;
     if(widthsV) state.rateColWidths = widthsV;
     if(archiveIndexV) state.archive = archiveIndexV; // 메타데이터만(base64 없음) — 다운로드 시 개별 조회
+    if(rateDefaultsV) state.rateDefaults = rateDefaultsV;
 
     const reports = {}, aggregates = {}, monthRates = {};
     let hasAnyWeek = false;
@@ -166,6 +170,7 @@ function flushStateToServer(){
     {key:`${KP}_centers`, value: state.centers},
     {key:`${KP}_ratewidths`, value: state.rateColWidths},
     {key: archiveIndexKey(), value: state.archive},
+    {key:`${KP}_ratedefaults`, value: state.rateDefaults||[]},
   ]).catch(()=> flash('저장 실패: 네트워크를 확인해 주세요'));
 }
 
@@ -192,7 +197,10 @@ function memberRateStatus(meta, memberId){
   centers.forEach(c=>{
     const row = mr[c.id]||{};
     const v = row['w'+wi];
-    if(v!==undefined && String(v).trim()!=='') filled++;
+    const hasExplicit = v!==undefined && String(v).trim()!=='';
+    // 기본값 규칙으로 자동 채워지는 주차도 "작성됨"으로 본다 (collect-rate-panel.js의 findRateDefault)
+    const hasDefault = !hasExplicit && typeof findRateDefault==='function' && findRateDefault(c.id, meta.year, meta.month, wi)!=null;
+    if(hasExplicit || hasDefault) filled++;
   });
   if(filled===0) return 'todo';
   if(filled===centers.length) return 'done';

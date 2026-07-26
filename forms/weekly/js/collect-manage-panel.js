@@ -119,7 +119,7 @@ async function resetAllData(){
   const archiveIds = (state.archive||[]).map(a=>a.id);
   await Promise.all(archiveIds.map(id => apiDelete(archiveItemKey(id))));
   const weekRows = await apiList(WEEK_PREFIX); // 담당자별 실적/계획, 취합본, 응대율 전부 이 접두어 아래에 있음
-  const smallKeys = [`${KP}_members`, `${KP}_centers`, `${KP}_ratewidths`, archiveIndexKey(), ...weekRows.map(r=>r.key)];
+  const smallKeys = [`${KP}_members`, `${KP}_centers`, `${KP}_ratewidths`, `${KP}_ratedefaults`, archiveIndexKey(), ...weekRows.map(r=>r.key)];
   await apiDeleteMany(smallKeys);
   state=defaultState(); draftBuffers={}; expandedHist={};
   flash('초기화 완료'); refreshWeekChrome(); renderAll();

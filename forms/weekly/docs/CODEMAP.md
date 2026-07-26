@@ -4,7 +4,7 @@
 > **원칙:** 허브 최상위 `docs/HUB-CODEMAP.md`에서 "주간보고"로 라우팅되면 이 문서만 보고,
 > 이 폴더(`forms/weekly/`) 밖은 열 필요가 없다. `shared/` 파일을 고쳐야 하는 경우만 예외
 > (그때는 `shared/docs/SHARED-CODEMAP.md` 참고, 다른 양식에 영향 없는지 반드시 확인).
-> **최종 갱신:** 2026-07-25
+> **최종 갱신:** 2026-07-26
 
 ---
 
@@ -28,8 +28,9 @@
 | 워드 취합 규칙 엔진(가나다/○/※/괄호/소관센터 병합) | `js/collect-docword-rules.js` | `aggregateSection`, `tokenizeParens`, `docLinesToHtml` |
 | DOCX 실제 생성(표 구조·색상·폰트·자간) | `js/collect-docx-export.js` | `buildDocxBlob`, `wHeaderCell`, `wParagraph` — `../../shared/logo-data.js`의 `KT_LOGO_DATAURI` 사용 |
 | 메인 탭(취합 최종본·현황·주차이력) | `js/collect-main-panel.js` | `renderMainPanel`, `doAggregate`, `saveWordAndArchive` |
-| 담당자 탭(개인 작성·히스토리) | `js/collect-member-panel.js` | `renderMemberPanel`, `saveMemberDraft` |
-| 응대율 탭(표·컬럼리사이즈·순서변경) | `js/collect-rate-panel.js` | `renderRatePanel`, `startColResize` |
+| 담당자 탭(개인 작성·히스토리, **AI 초안은 강성호(m1)만**) | `js/collect-member-panel.js` | `renderMemberPanel`, `saveMemberDraft`, `generateAiDraft`(m1 전용, `/api/ai-weekly-draft` 호출) |
+| 응대율 탭(표·컬럼리사이즈·순서변경·담당자 필터·기본값 규칙) | `js/collect-rate-panel.js` | `renderRatePanel`, `startColResize`, `findRateDefault`/`effectiveRateValue`(기본값 규칙), `setRateMemberFilter` |
+| **(신규)** AI 초안 서버 프록시 | `api/ai-weekly-draft.js` | 캘린더/일일보고/업무로그(mt_meetings 등)/직전주 작성분을 모아 Claude 호출 — 강성호 전용, 아래 §6 참고 |
 | 자료보관함 탭 | `js/collect-archive-panel.js` | `renderArchivePanel` |
 | 관리 탭(담당자/센터 CRUD, 허브 비밀번호 변경) | `js/collect-manage-panel.js` | `renderManagePanel`, `changeLockPw`(→`shared/auth.js`의 `changeHubPw` 호출) |
 | 탭 전환·전체 렌더링·초기화 | `js/collect-app.js` | `switchTab`, `renderAll`, 최하단 `init()` |
@@ -109,6 +110,7 @@ shared/kv-client.js → shared/auth.js → collect-dates.js → collect-state.js
 | 담당자 목록 | `ktis_v11__weekly_members` | `collect-manage-panel.js`, 배치 저장(`apiSetMany`, `flushStateToServer`) |
 | 센터 목록 | `ktis_v11__weekly_centers` | `collect-manage-panel.js`/`collect-rate-panel.js`, 배치 저장 |
 | 응대율 컬럼폭 | `ktis_v11__weekly_ratewidths` | `collect-rate-panel.js`, 배치 저장 |
+| 응대율 기본값 규칙(센터+기간+기본%) | `ktis_v11__weekly_ratedefaults` | `collect-rate-panel.js`의 `addRateDefault`/`deleteRateDefault`, 배치 저장 |
 | 자료보관함 목록(메타데이터만, base64 없음) | `ktis_v11__weekly_archive_index` | `collect-main-panel.js`, 배치 저장 |
 | 자료보관함 실제 파일(base64, 항목별) | `ktis_v11__weekly_archive_item__{id}` | `collect-main-panel.js`의 `saveWordAndArchive` — 큰 값이라 `apiSet`이 필요하면 자동 청크 분할 |
 | 담당자별 실적/계획 (주차 단위) | `ktis_v11__weekly__rpt__{weekKey}__{memberId}` | `collect-member-panel.js`의 `saveMemberDraft` — **이 담당자 몫만** 저장 |
@@ -130,3 +132,19 @@ shared/kv-client.js → shared/auth.js → collect-dates.js → collect-state.js
 화면 전용 상태(현재 탭, 자료보관함 페이지)는 서버로 보내지 않고 브라우저 `localStorage`(`kkangbi_weekly_ui_v1`)에만 둔다 — 팀원마다 다를 수 있는 값이라 공유할 필요가 없음.
 
 **아직 미구현 — 다음 세션에서 다룰 것:** `api/storage.js`는 지금 요청 인증이 전혀 없다(URL만 알면 누구나 읽고 쓸 수 있음). 허브 진입 시 공용 비밀번호(`shared/auth.js`)를 넣긴 했지만 이건 "아무나 화면을 못 열게" 하는 정도의 가벼운 게이트일 뿐, API 자체를 보호하진 않는다. 팀원별 개인 토큰 기반 접근 제어(`/collect/{요청ID}-{개인토큰}`)는 별도 설계가 필요하다.
+
+---
+
+## 6. AI 초안("깡비서 초안") — 강성호(m1) 전용 (2026-07-26 추가)
+
+- **위치/명칭**: 담당자 탭 중 강성호(m1) 탭에서만, 실적 입력란 라벨 오른쪽 위에 "🤖 깡비서 초안" 버튼. 클릭하면 실적+계획을 한 번에 채운다(자동 저장 안 함 — 확인 후 「이번 주차 저장」을 눌러야 반영).
+- **다른 담당자에는 절대 넣지 않는다** — 깡비서.kr에 본인 데이터가 있는 건 강성호뿐이라는 게 전제. `renderMemberPanel`에서 `memberId==='m1'` 조건으로 버튼 자체를 렌더링 안 하고, `generateAiDraft`도 첫 줄에서 `memberId!=='m1'`이면 즉시 return.
+- **자료 출처** (`api/ai-weekly-draft.js`가 서버에서 조회, 클라이언트는 기간만 넘김):
+  - 캘린더 일정: `ktis_v11__events__{year}` (rpt_kv, 깡비서 캘린더 앱과 **같은 Supabase 프로젝트** 전제)
+  - 일일보고: `ktis_v11__reports`의 `dailyReports` 배열
+  - 업무로그: `mt_meetings`/`mt_calls`/`mt_reports` 테이블 (rpt_kv 아님, 일반 Postgres 테이블 직접 조회)
+  - 이 시스템 자체의 직전 주 강성호 작성분: `ktis_v11__weekly__rpt__{prevWeekKey}__m1`
+- 위 자료 중 일부가 없거나 조회 실패해도 전체를 실패시키지 않는다 — 있는 자료만으로 초안을 만들고, AI에게 "근거 없으면 (확인 필요)로 표시"하도록 지시해뒀다.
+- AI 응답은 `===실적===`/`===계획===` 마커로 나눠서 파싱한다 — 이 마커 문구를 시스템 프롬프트에서 임의로 바꾸면 파싱이 깨지니 같이 맞출 것.
+- **필요 환경변수**: `ANTHROPIC_API_KEY`(신규, Vercel에 추가 필요), `CLAUDE_MODEL`(선택, 기본값 `claude-sonnet-4-6` — `claude-sonnet-5`는 한글 인코딩 깨짐 이슈로 깡비서 전체에서 금지, `docs/NEW-FORM-GUIDE.md` §3.3 참고). `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`는 `api/storage.js`와 동일한 것 재사용.
+- **확인 필요(다음 세션 과제)**: 이 프로젝트의 Supabase 프로젝트가 깡비서 캘린더 앱과 실제로 동일한지 아직 실제 배포 환경에서 검증 못함(로컬 모의 서버로는 API 호출 자체 흐름만 검증했고, 실제 캘린더/업무로그 데이터 조회는 확인 못함) — 실사용해보고 자료가 하나도 안 딸려오면 이 부분부터 확인할 것.

@@ -57,7 +57,10 @@ function renderMemberPanel(memberId){
       ${rs==='done'?badge('실적·계획 완료','done'):rs==='partial'?badge('일부 작성','partial'):badge('미작성','todo')}
       · 응대율 ${rt==='done'?badge('완료','done'):rt==='partial'?badge('일부','partial'):rt==='none'?badge('소관없음','partial'):badge('미작성','todo')}
     </p>
-    <div class="field-label">실적 (${meta.perfRange})</div>
+    <div class="field-label-row">
+      <div class="field-label">실적 (${meta.perfRange})</div>
+      ${memberId==='m1' ? `<button type="button" class="btn btn-outline btn-sm ai-draft-btn" id="aiDraftBtn" onclick="generateAiDraft('${memberId}')">🤖 깡비서 초안</button>` : ''}
+    </div>
     <textarea class="input-area" id="draft-perf" placeholder="자유롭게 작성 (가/나/다, ○, ※ 형식이 있으면 취합 시 그대로 반영)">${escapeHtml(draft.perf)}</textarea>
     <div class="field-label">계획 (${meta.planRange})</div>
     <textarea class="input-area" id="draft-plan" placeholder="다음 주 계획">${escapeHtml(draft.plan)}</textarea>
@@ -104,6 +107,40 @@ function loadHistToDraft(memberId, weekKey){
   draftBuffers[draftKey(meta.weekKey, memberId)] = {perf:r.perf||'', plan:r.plan||''};
   flash('히스토리 내용을 입력란에 불러왔습니다. 저장 버튼을 눌러 현재 주차에 반영하세요.');
   renderAll();
+}
+// "깡비서 초안" — 강성호(m1) 전용. 깡비서.kr 캘린더/일일보고/업무로그 + 직전 주 본인 작성
+// 내용을 서버(api/ai-weekly-draft.js)가 모아 Claude에게 실적/계획 초안을 만들게 한 뒤,
+// 두 입력란을 채운다(자동 저장은 하지 않음 — 확인하고 「이번 주차 저장」을 눌러야 반영됨).
+async function generateAiDraft(memberId){
+  if(memberId !== 'm1') return; // 다른 담당자는 깡비서 데이터가 없어 이 기능 대상이 아님
+  const btn = document.getElementById('aiDraftBtn');
+  const meta = currentMeta();
+  const prevEntry = prevWeekEntry(meta.year, meta.month, meta.weekOfMonth);
+  const prevWeekKey = `${prevEntry.year}-${pad2(prevEntry.month)}-W${prevEntry.week.index}`;
+  if(btn){ btn.disabled = true; btn.textContent = '⏳ 생성 중…'; }
+  flash('깡비서 초안 생성 중… (캘린더·업무로그 불러오는 중)');
+  try{
+    const res = await fetch('/api/ai-weekly-draft', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        weekKey: meta.weekKey,
+        prevWeekKey,
+        year: meta.year,
+        perfStart: fmtISO(meta.mon), perfEnd: fmtISO(meta.sun),
+        planStart: fmtISO(meta.nextMon), planEnd: fmtISO(meta.nextSun)
+      })
+    });
+    const data = await res.json();
+    if(!res.ok || data.error) throw new Error(data.error || '생성 실패');
+    draftBuffers[draftKey(meta.weekKey, memberId)] = {perf:data.perf||'', plan:data.plan||''};
+    flash('깡비서 초안이 생성됐습니다 — 내용을 확인하고 「이번 주차 저장」을 눌러주세요.');
+    renderAll();
+  }catch(e){
+    console.error(e);
+    flash('초안 생성 실패: ' + (e.message || '네트워크를 확인해 주세요'));
+    if(btn){ btn.disabled = false; btn.textContent = '🤖 깡비서 초안'; }
+  }
 }
 function saveMemberDraft(memberId){
   const perf = document.getElementById('draft-perf').value;
