@@ -3,7 +3,12 @@ function switchTab(id){
   flushMemberDraft();
   flushFinalEditNow();
   state.activeTab = id;
-  saveState();
+  // 주의: 여기서 saveState()를 부르지 않는다(2026-07-27 발견). saveState()는 담당자/센터
+  // 목록·응대율 컬럼폭·자료보관함 목록·응대율 기본값 규칙을 "배열 전체 덮어쓰기"로 서버에
+  // 보낸다 — 이 데이터는 최초 접속 시 한 번만 불러오고 이후 새로고침하지 않으므로, 브라우저를
+  // 오래 켜둔 사람이 탭만 눌러도(실제 편집 없이) 자기 브라우저의 오래된 스냅샷을 서버로 다시
+  // 밀어넣어 그 사이 다른 사람이 추가/수정한 내용을 지워버릴 수 있다. activeTab 자체는
+  // 서버로 보내지 않는 값이라(팀원마다 다른 탭을 보고 있어야 하므로) 애초에 저장할 이유도 없다.
   renderAll();
 }
 function renderTabs(){
