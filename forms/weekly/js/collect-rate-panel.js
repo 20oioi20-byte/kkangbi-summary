@@ -109,6 +109,11 @@ function renderRatePanel(){
       <col id="rmcol-del" style="width:${cw.del}px;">
     </colgroup>`;
   const rez = (key)=> `<span class="col-resizer" data-col="${key}" onmousedown="startColResize(event,'${key}')"></span>`;
+  // table-layout:fixed는 table 자체에 명시적 width가 없으면(=auto) 좁은 화면(모바일)에서 colgroup
+  // 폭을 무시하고 전 컬럼을 비율대로 욱여넣어버린다 — sticky 센터명 칸까지 찌그러들면서 옆 칸과의
+  // 경계 픽셀이 어긋나 흰 여백처럼 보이는 원인이었다. 컬럼 폭 합계를 table 자체 폭으로 강제 지정해
+  // 항상 실제 폭 그대로 렌더링되게 하고(모자란 폭은 .rate-wrap의 가로 스크롤로 해결).
+  const totalTableWidth = cw.order+cw.pm+cw.cname+cw.avg+cw.wk1+cw.wk2+cw.wk3+cw.wk4+cw.wk5+cw.reason+cw.del;
 
   return `
   <div class="card">
@@ -135,7 +140,7 @@ function renderRatePanel(){
       </select>
     </div>
     <div class="rate-wrap">
-      <table class="rate-matrix" id="rateMatrixTable">
+      <table class="rate-matrix" id="rateMatrixTable" style="width:${totalTableWidth}px;min-width:${totalTableWidth}px;">
         ${colgroupHtml}
         <thead>
           <tr>
@@ -174,13 +179,13 @@ function renderRateDefaultsPanel(meta){
   const wOpts = (sel) => [1,2,3,4,5,6].map(w=>`<option value="${w}" ${w===sel?'selected':''}>${w}주차</option>`).join('');
   const centerOpts = state.centers.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
 
-  const rules = (state.rateDefaults||[]).length ? state.rateDefaults.map(r=>{
+  const rules = (state.rateDefaults||[]).length ? `<div class="rd-rules-list">${state.rateDefaults.map(r=>{
     const c = centerById(r.centerId);
-    return `<div class="mgmt-row">
-      <span class="grow">${escapeHtml(c?c.name:'(삭제된 센터)')} · ${r.sy}년 ${r.sm}월 ${r.sw}주차 ~ ${r.ey}년 ${r.em}월 ${r.ew}주차 · <b>${escapeHtml(r.value)}%</b></span>
-      <button class="btn btn-danger btn-sm" onclick="deleteRateDefault('${r.id}')">삭제</button>
+    return `<div class="rd-rule-row">
+      <span class="rd-rule-text" title="${escapeHtml(c?c.name:'(삭제된 센터)')} · ${r.sy}.${r.sm}월${r.sw}주 ~ ${r.ey}.${r.em}월${r.ew}주 · ${escapeHtml(r.value)}%">${escapeHtml(c?c.name:'(삭제된 센터)')} · ${r.sy}.${r.sm}월${r.sw}주 ~ ${r.ey}.${r.em}월${r.ew}주 · <b>${escapeHtml(r.value)}%</b></span>
+      <button class="btn-link" style="color:#a33;" onclick="deleteRateDefault('${r.id}')">삭제</button>
     </div>`;
-  }).join('') : `<div class="empty">등록된 기본값 규칙이 없습니다.</div>`;
+  }).join('')}</div>` : `<div class="empty" style="padding:14px;font-size:12px;">등록된 기본값 규칙이 없습니다.</div>`;
 
   return `
   <div class="card rate-defaults-card">

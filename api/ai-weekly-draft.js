@@ -198,25 +198,30 @@ export default async function handler(req, res) {
     const windowStart = perfStart < planStart ? perfStart : planStart;
     const windowEnd = perfEnd > planEnd ? perfEnd : planEnd;
 
-    // 1) 캘린더 일정 — 월별 키(ktis_v11__events__{YYYY-MM})
+    // 자료 조회는 서로 의존관계가 없어 병렬로 실행한다(순차 호출 대비 대기 시간 단축).
+    // 단, AI 모델 자체가 답을 생성하는 시간(수 초)은 이 최적화와 무관하게 그대로 걸린다 —
+    // callGatewayClaude/callClaudeDirect 호출 자체가 병목이며 더 줄일 수 있는 여지가 없다.
     const months = monthKeysInRange(windowStart, windowEnd);
+    const [eventsByMonth, reportsBlob, wlAgg, wlItems, prevReport] = await Promise.all([
+      Promise.all(months.map(mk => sbGetKV(`ktis_v11__events__${mk}`))),
+      sbGetKV('ktis_v11__reports'),
+      sbGetKV('ktis_v11__worklogs'),
+      listResolvedKV(WL_ITEM_PREFIX),
+      prevWeekKey ? sbGetKV(`ktis_v11__weekly__rpt__${prevWeekKey}__m1`) : Promise.resolve(null),
+    ]);
+
+    // 1) 캘린더 일정 — 월별 키(ktis_v11__events__{YYYY-MM})
     let events = [];
-    for (const mk of months) {
-      const arr = await sbGetKV(`ktis_v11__events__${mk}`);
-      if (Array.isArray(arr)) events.push(...arr);
-    }
+    eventsByMonth.forEach(arr => { if (Array.isArray(arr)) events.push(...arr); });
     events = events.filter(e => inRange(e && e.date, windowStart, windowEnd));
 
     // 2) 일일보고 (ktis_v11__reports.dailyReports)
-    const reportsBlob = await sbGetKV('ktis_v11__reports');
     const dailyReports = (reportsBlob && Array.isArray(reportsBlob.dailyReports))
       ? reportsBlob.dailyReports.filter(r => inRange(r && r.date, windowStart, windowEnd))
       : [];
 
     // 3) 업무로그 — 구 통합 키(ktis_v11__worklogs) + 항목별 키(ktis_v11__worklog__{id}) 병합,
     //    항목별이 우선(같은 id면 항목별 값으로 덮어씀) — 깡비서 본체 storage.js와 동일한 병합 규칙.
-    const wlAgg = await sbGetKV('ktis_v11__worklogs');
-    const wlItems = await listResolvedKV(WL_ITEM_PREFIX);
     const wlMap = new Map();
     ((wlAgg && wlAgg.workLogs) || []).forEach(w => { if (w && w.id) wlMap.set(w.id, w); });
     wlItems.forEach(({ value: w }) => { if (w && w.id) wlMap.set(w.id, w); });
@@ -224,9 +229,7 @@ export default async function handler(req, res) {
       .filter(w => inRange(w && w.date, windowStart, windowEnd))
       .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
       .slice(0, 100);
-
-    // 4) 이 시스템의 직전 주 강성호 작성 내용
-    const prevReport = prevWeekKey ? await sbGetKV(`ktis_v11__weekly__rpt__${prevWeekKey}__m1`) : null;
+    // 4) 이 시스템 자체의 직전 주 강성호 작성 내용은 위 Promise.all에서 이미 조회됨(prevReport)
 
     const contextText = `
 [캘린더 일정 (${windowStart} ~ ${windowEnd})]
@@ -247,18 +250,25 @@ ${fmtList(workLogs, w => `- ${w.date} [${WL_TYPE_LABEL[w.type] || w.type || ''}]
 아래 자료(캘린더 일정, 일일보고, 업무로그, 직전 주 작성 내용)를 바탕으로 이번 주 "실적"과 다음 주 "계획"의 초안을 작성하세요.
 
 반드시 지킬 형식 규칙:
-1. 안건 제목은 "가.", "나.", "다." 순서로 시작 (하나의 안건 = 하나의 제목 줄)
-2. 제목 아래 상세 내용은 앞에 "○ "를 붙인 줄로 작성
-3. 참고사항(있는 경우만)은 앞에 "※ "를 붙인 줄로 작성
+1. 안건 제목은 "가.", "나.", "다." 순서로 시작한다(하나의 안건 = 하나의 제목 줄). 안건과 안건 사이에 빈 줄을 넣지 말고 바로 이어서 작성한다.
+2. 각 제목 바로 다음 줄에 공백 1칸 + "○ "로 시작하는 줄을 안건당 정확히 1개만 작성한다. 여러 개로 나누지 말고 핵심만 최대한 요약해서 2줄을 넘기지 않는다.
+3. 참고사항이 있을 때만 공백 2칸 + "※ "로 시작하는 줄을 그 아래에 추가한다(없으면 아예 생략).
 4. 실제로 자료에 근거가 있는 내용만 작성 — 근거 없는 내용을 지어내지 않는다
 5. 자료가 부족해 확신이 서지 않으면 짧게만 쓰고 "(확인 필요)"라고 표시한다
 6. 존댓말/설명체 없이 실제 업무 보고서처럼 간결한 개조식으로 작성
 
+출력 예시(줄바꿈·들여쓰기·안건 사이 빈 줄 없음까지 정확히 그대로 지킬 것):
+가. 안건 제목
+ ○ 핵심만 최대한 요약한 한두 줄
+  ※ 참고사항(있는 경우만)
+나. 다음 안건 제목
+ ○ 핵심만 최대한 요약한 한두 줄
+
 출력은 다른 설명 없이 반드시 아래 형식 그대로:
 ===실적===
-(실적 내용)
+(위 규칙을 지킨 실적 내용)
 ===계획===
-(계획 내용)`;
+(위 규칙을 지킨 계획 내용)`;
 
     const userPrompt = `${contextText}\n\n위 자료를 바탕으로 이번 주 실적과 다음 주 계획 초안을 작성해줘.`;
 
