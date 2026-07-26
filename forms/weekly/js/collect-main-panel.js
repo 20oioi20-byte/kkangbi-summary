@@ -173,18 +173,23 @@ async function saveWordAndArchive(){
     const id = 'a'+Date.now();
     // 보관함 목록에는 메타데이터만 넣는다(base64 제외) — 실제 파일은 archiveItemKey로 따로 저장.
     // 목록을 계속 작게 유지해야 회사망 payload 크기 문제를 피할 수 있다.
-    state.archive = state.archive || [];
-    state.archive.unshift({
+    const newEntry = {
       id,
       fileName,
       createdAt: new Date().toISOString(),
       weekKey: meta.weekKey,
       weekLabel: meta.fullLabel,
       size: blob.size
+    };
+    // 서버의 최신 보관함 목록 위에 이번 항목만 추가한다(그 사이 다른 사람이 저장한 항목을
+    // 지우지 않도록) — 초과분(overflow) 판단도 그 최신 목록 기준으로 한다.
+    let overflow = [];
+    state.archive = await mutateSharedList(archiveIndexKey(), state.archive, arr=>{
+      arr.unshift(newEntry);
+      overflow = arr.length > ARCHIVE_MAX ? arr.splice(ARCHIVE_MAX) : [];
+      return arr;
     });
-    const overflow = state.archive.length > ARCHIVE_MAX ? state.archive.splice(ARCHIVE_MAX) : [];
     state.archivePage = 1;
-    saveState(); // 목록 저장(작음, 배치로)
     apiSet(archiveItemKey(id), {base64:b64}).catch(()=> flash('보관함 파일 저장 실패: 네트워크를 확인해 주세요'));
     overflow.forEach(o => apiDelete(archiveItemKey(o.id))); // 초과분 실제 파일도 정리(고아 데이터 방지)
     downloadBlob(blob, fileName);

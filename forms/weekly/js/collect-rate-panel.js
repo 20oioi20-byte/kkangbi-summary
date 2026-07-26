@@ -236,7 +236,7 @@ function toggleRateSettings(){
   state._rateSettingsOpen = !state._rateSettingsOpen;
   renderAll();
 }
-function addRateDefault(){
+async function addRateDefault(){
   const centerId = document.getElementById('rdCenter').value;
   const sy = +document.getElementById('rdStartY').value;
   const sm = +document.getElementById('rdStartM').value;
@@ -250,18 +250,18 @@ function addRateDefault(){
   const startKey = rateWeekSortKey(sy,sm,sw);
   const endKey = rateWeekSortKey(ey,em,ew);
   if(startKey > endKey){ flash('시작 기간이 종료 기간보다 늦을 수 없습니다'); return; }
-  if(!state.rateDefaults) state.rateDefaults = [];
-  state.rateDefaults.push({id:'rd'+Date.now(), centerId, startKey, endKey, sy, sm, sw, ey, em, ew, value});
-  saveState();
+  const newRule = {id:'rd'+Date.now(), centerId, startKey, endKey, sy, sm, sw, ey, em, ew, value};
+  state.rateDefaults = await mutateSharedList(`${KP}_ratedefaults`, state.rateDefaults, arr=>{
+    arr.push(newRule); return arr;
+  });
   // 새로 추가한 규칙이 바로 보이도록 마지막 페이지로 이동
   state._rdPage = Math.max(1, Math.ceil(state.rateDefaults.length / 10));
   flash('기본값 규칙이 저장되었습니다');
   renderAll();
 }
-function deleteRateDefault(id){
+async function deleteRateDefault(id){
   if(!confirm('이 기본값 규칙을 삭제할까요?')) return;
-  state.rateDefaults = (state.rateDefaults||[]).filter(r=>r.id!==id);
-  saveState();
+  state.rateDefaults = await mutateSharedList(`${KP}_ratedefaults`, state.rateDefaults, arr=> arr.filter(r=>r.id!==id));
   renderAll(); // 삭제로 페이지가 남으면 renderRateDefaultsPanel의 클램프 로직이 자동으로 보정
 }
 function shiftRdPage(delta){
@@ -297,46 +297,50 @@ function startColResize(e, key){
     const delta = ev.clientX - startX;
     const newWidth = Math.max(24, Math.round(startWidth + delta));
     state.rateColWidths[key] = newWidth;
-    saveState();
+    mutateSharedObject(`${KP}_ratewidths`, state.rateColWidths, obj=>{ obj[key] = newWidth; return obj; })
+      .then(fresh=>{ state.rateColWidths = fresh; });
   }
   document.addEventListener('mousemove', onMove);
   document.addEventListener('mouseup', onUp);
 }
-function moveCenter(id, dir){
-  const idx = state.centers.findIndex(c=>c.id===id);
-  if(idx<0) return;
-  const swapIdx = idx+dir;
-  if(swapIdx<0 || swapIdx>=state.centers.length) return;
-  const tmp = state.centers[idx];
-  state.centers[idx] = state.centers[swapIdx];
-  state.centers[swapIdx] = tmp;
-  saveState();
+async function moveCenter(id, dir){
+  // 로컬에 남아있던 순서가 아니라, 서버의 최신 순서를 기준으로 이웃과 자리를 바꾼다.
+  state.centers = await mutateSharedList(`${KP}_centers`, state.centers, arr=>{
+    const idx = arr.findIndex(c=>c.id===id);
+    if(idx<0) return arr;
+    const swapIdx = idx+dir;
+    if(swapIdx<0 || swapIdx>=arr.length) return arr;
+    const tmp = arr[idx]; arr[idx] = arr[swapIdx]; arr[swapIdx] = tmp;
+    return arr;
+  });
   renderAll();
 }
-function updateCenterField(id, field, value){
-  const c = centerById(id); if(!c) return;
-  if(field==='name') c.name = value.trim() || c.name;
-  else if(field==='owner') c.ownerId = value;
-  saveState();
+async function updateCenterField(id, field, value){
+  state.centers = await mutateSharedList(`${KP}_centers`, state.centers, arr=>{
+    const c = arr.find(x=>x.id===id); if(!c) return arr;
+    if(field==='name') c.name = value.trim() || c.name;
+    else if(field==='owner') c.ownerId = value;
+    return arr;
+  });
   renderAll();
 }
 function toggleRateShowHidden(checked){
   state._rateShowHidden = checked;
   renderAll();
 }
-function deleteCenterInline(id){
+async function deleteCenterInline(id){
   const c = centerById(id); if(!c) return;
   if(!confirm(`「${c.name}」 센터를 삭제할까요?\n지난 응대율 기록도 화면에서 더 이상 보이지 않게 됩니다.\n나중에 과거 자료를 다시 볼 수 있으려면 삭제 대신 "숨기기"를 눌러주세요.`)) return;
-  state.centers = state.centers.filter(x=>x.id!==id);
-  saveState();
+  state.centers = await mutateSharedList(`${KP}_centers`, state.centers, arr=> arr.filter(x=>x.id!==id));
   flash('센터가 삭제되었습니다');
   renderAll();
 }
-function addCenterInline(){
+async function addCenterInline(){
   const ownerId = (state.members[0]||{}).id;
   const id = 'c'+Date.now();
-  state.centers.push({id, name:'새 센터', ownerId, hidden:false});
-  saveState();
+  state.centers = await mutateSharedList(`${KP}_centers`, state.centers, arr=>{
+    arr.push({id, name:'새 센터', ownerId, hidden:false}); return arr;
+  });
   renderAll();
 }
 function shiftRateMonth(delta){

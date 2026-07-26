@@ -153,19 +153,35 @@ async function loadState(){
   if(typeof renderAll === 'function') renderAll();
 }
 
-let _saveTimer = null;
-function saveState(){
-  saveUiPrefs();
-  clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(flushStateToServer, 300);
+// 담당자목록/센터목록/응대율 컬럼폭/자료보관함목록/응대율 기본값규칙 — 이 5개는 배열/객체
+// "전체"가 하나의 키에 들어있다. 예전에는 브라우저가 페이지 진입 시 한 번 불러온 로컬 복사본을
+// 그대로 고쳐서 통째로 덮어썼는데, 이 복사본은 그 뒤로 절대 새로고침되지 않기 때문에 오래
+// 켜둔 브라우저가 "그 사이 다른 사람이 추가/수정한 내용"을 지워버리는 사고가 날 수 있었다
+// (2026-07-27 발견). 그래서 이 5개를 건드리는 모든 동작은 이제 "쓰기 직전에 서버의 최신 값을
+// 다시 읽어와서 그 위에 내가 의도한 변경 하나만 적용"하는 방식(mutateSharedList/Object)을 쓴다.
+// 이렇게 하면 두 사람이 완전히 같은 순간(네트워크 왕복 시간, 보통 수백ms 이내)에 동시에 고치는
+// 극히 드문 경우를 제외하면 서로의 변경을 지우는 사고가 사실상 없어진다.
+async function mutateSharedList(key, localFallback, mutateFn){
+  let fresh;
+  try{ const v = await apiGet(key); fresh = Array.isArray(v) ? v : null; }catch(e){ fresh = null; }
+  if(!fresh) fresh = JSON.parse(JSON.stringify(localFallback || []));
+  const result = mutateFn(fresh) || fresh;
+  await apiSet(key, result);
+  return result;
 }
-// 담당자/센터 "목록"과 자료보관함 목록(메타데이터만)은 여기서 요청 하나로 묶어 저장한다 —
-// 이 셋은 보통 한 번에 한 사람(관리자)만 손대는 데이터라 통째로 덮어써도 실질적인 충돌
-// 위험이 낮고, 개별 요청 여러 번 대신 배치 하나로 보내면 왕복 횟수가 줄어든다. 담당자
-// 실적/계획/취합본/응대율은 각자 저장 시점에 reportKey/aggKey/rateKey로 개별 저장한다
-// (아래 각 파일 참고). 자료보관함의 실제 파일(base64)은 archiveItemKey로 따로 저장된다.
+async function mutateSharedObject(key, localFallback, mutateFn){
+  let fresh;
+  try{ const v = await apiGet(key); fresh = (v && typeof v==='object' && !Array.isArray(v)) ? v : null; }catch(e){ fresh = null; }
+  if(!fresh) fresh = JSON.parse(JSON.stringify(localFallback || {}));
+  const result = mutateFn(fresh) || fresh;
+  await apiSet(key, result);
+  return result;
+}
+// 백업 파일 복원(importAllJson) 전용 — 사용자가 명시적으로 "이 백업 상태 그대로 되돌리기"를
+// 선택한 경우라 여기서만 배열 전체를 의도적으로 통째로 덮어쓴다(그 외 모든 곳은 위 mutateSharedList/
+// Object로 개별 변경만 반영).
 function flushStateToServer(){
-  apiSetMany([
+  return apiSetMany([
     {key:`${KP}_members`, value: state.members},
     {key:`${KP}_centers`, value: state.centers},
     {key:`${KP}_ratewidths`, value: state.rateColWidths},

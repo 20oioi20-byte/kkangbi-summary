@@ -87,11 +87,7 @@ function shiftMemberHistMonth(delta){
   m += delta;
   if(m<1){ m=12; y--; }
   if(m>12){ m=1; y++; }
-  state.memberHistMonth = {y,m};
-  // saveState()가 아니라 saveUiPrefs()만 부른다 — memberHistMonth는 브라우저 로컬(localStorage)
-  // 전용 값이라 애초에 서버로 안 나간다. saveState()를 부르면 담당자/센터 목록 등 5개 공유
-  // 배열까지 통째로 다시 덮어써서, 단순히 히스토리 월만 넘겨봐도 다른 사람이 그 사이 편집한
-  // 목록을 지워버릴 수 있었다(2026-07-27 발견 — switchTab()과 동일한 문제).
+  state.memberHistMonth = {y,m}; // 브라우저 로컬(localStorage) 전용 값이라 서버로는 안 나간다
   saveUiPrefs();
   flushMemberDraft(); // 입력 draft 보존 (activeTab은 그대로라 안전)
   renderAll();

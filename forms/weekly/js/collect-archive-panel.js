@@ -47,10 +47,9 @@ async function redownloadArchive(id){
   downloadBlob(blob, a.fileName);
   flash('다운로드 시작');
 }
-function deleteArchive(id){
+async function deleteArchive(id){
   if(!confirm('이 자료를 보관함에서 삭제할까요?')) return;
-  state.archive = (state.archive||[]).filter(x=>x.id!==id);
-  saveState();
+  state.archive = await mutateSharedList(archiveIndexKey(), state.archive, arr=> arr.filter(x=>x.id!==id));
   apiDelete(archiveItemKey(id));
   flash('삭제되었습니다');
   renderAll();

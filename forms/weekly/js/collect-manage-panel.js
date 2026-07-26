@@ -61,57 +61,83 @@ async function changeLockPw(){
   if(input) input.value = '';
   flash('비밀번호가 변경되었습니다 (000000은 계속 예비 비밀번호로 사용 가능)');
 }
-function saveMemberEdits(){
+async function saveMemberEdits(){
+  // DOM에 보이는 대로 "이 id는 이 이름으로" 의도만 뽑아두고, 실제 반영은 서버의 최신 목록
+  // 위에 적용한다(이 화면을 열어둔 사이 다른 사람이 담당자를 추가/삭제했을 수 있으므로).
+  const edits = {};
   document.querySelectorAll('.mgmt-row[data-mid]').forEach(row=>{
-    const m=memberById(row.getAttribute('data-mid')); if(!m) return;
-    m.name = row.querySelector('[data-f="name"]').value.trim()||m.name;
+    const id = row.getAttribute('data-mid');
+    const name = row.querySelector('[data-f="name"]').value.trim();
+    if(name) edits[id] = name;
   });
-  saveState(); flash('담당자 저장'); renderAll();
+  state.members = await mutateSharedList(`${KP}_members`, state.members, arr=>{
+    arr.forEach(m=>{ if(edits[m.id]) m.name = edits[m.id]; });
+    return arr;
+  });
+  flash('담당자 저장'); renderAll();
 }
-function addMember(){
+async function addMember(){
   const name=(document.getElementById('newMemberName').value||'').trim();
   if(!name){ flash('이름 입력'); return; }
   const id='m'+Date.now();
-  state.members.push({id,name,hidden:false});
-  saveState(); switchTab(id);
+  state.members = await mutateSharedList(`${KP}_members`, state.members, arr=>{
+    arr.push({id,name,hidden:false}); return arr;
+  });
+  switchTab(id);
 }
-function toggleMemberHide(id){
-  const m=memberById(id); if(!m) return;
-  m.hidden=!m.hidden;
-  if(m.hidden && state.activeTab===id) state.activeTab='main';
-  saveState(); renderAll();
+async function toggleMemberHide(id){
+  state.members = await mutateSharedList(`${KP}_members`, state.members, arr=>{
+    const m = arr.find(x=>x.id===id); if(m) m.hidden = !m.hidden; return arr;
+  });
+  const m = memberById(id);
+  if(m && m.hidden && state.activeTab===id) state.activeTab='main';
+  renderAll();
 }
-function deleteMember(id){
+async function deleteMember(id){
   const m=memberById(id); if(!m) return;
   if(!confirm(`「${m.name}」 담당자를 삭제할까요?\n과거 작성 이력(주간 히스토리)은 유지되지만, 신규 작성 탭에서는 사라집니다.`)) return;
-  state.members = state.members.filter(x=>x.id!==id);
+  state.members = await mutateSharedList(`${KP}_members`, state.members, arr=> arr.filter(x=>x.id!==id));
   if(state.activeTab===id) state.activeTab='main';
-  saveState(); flash('담당자가 삭제되었습니다'); renderAll();
+  flash('담당자가 삭제되었습니다'); renderAll();
 }
-function saveCenterEdits(){
+async function saveCenterEdits(){
+  const edits = {};
   document.querySelectorAll('.mgmt-row[data-cid]').forEach(row=>{
-    const c=centerById(row.getAttribute('data-cid')); if(!c) return;
-    c.name=row.querySelector('[data-f="name"]').value.trim()||c.name;
-    c.ownerId=row.querySelector('[data-f="owner"]').value;
+    const id = row.getAttribute('data-cid');
+    const name = row.querySelector('[data-f="name"]').value.trim();
+    const ownerId = row.querySelector('[data-f="owner"]').value;
+    edits[id] = {name, ownerId};
   });
-  saveState(); flash('센터 저장'); renderAll();
+  state.centers = await mutateSharedList(`${KP}_centers`, state.centers, arr=>{
+    arr.forEach(c=>{
+      const e = edits[c.id]; if(!e) return;
+      if(e.name) c.name = e.name;
+      c.ownerId = e.ownerId;
+    });
+    return arr;
+  });
+  flash('센터 저장'); renderAll();
 }
-function addCenter(){
+async function addCenter(){
   const name=(document.getElementById('newCenterName').value||'').trim();
   const ownerId=document.getElementById('newCenterOwner').value;
   if(!name){ flash('센터명 입력'); return; }
-  state.centers.push({id:'c'+Date.now(), name, ownerId, hidden:false});
-  saveState(); flash('센터 추가'); renderAll();
+  state.centers = await mutateSharedList(`${KP}_centers`, state.centers, arr=>{
+    arr.push({id:'c'+Date.now(), name, ownerId, hidden:false}); return arr;
+  });
+  flash('센터 추가'); renderAll();
 }
-function toggleCenterHide(id){
-  const c=centerById(id); if(!c) return;
-  c.hidden=!c.hidden; saveState(); renderAll();
+async function toggleCenterHide(id){
+  state.centers = await mutateSharedList(`${KP}_centers`, state.centers, arr=>{
+    const c = arr.find(x=>x.id===id); if(c) c.hidden = !c.hidden; return arr;
+  });
+  renderAll();
 }
-function deleteCenter(id){
+async function deleteCenter(id){
   const c=centerById(id); if(!c) return;
   if(!confirm(`「${c.name}」 삭제?`)) return;
-  state.centers=state.centers.filter(x=>x.id!==id);
-  saveState(); flash('삭제됨'); renderAll();
+  state.centers = await mutateSharedList(`${KP}_centers`, state.centers, arr=> arr.filter(x=>x.id!==id));
+  flash('삭제됨'); renderAll();
 }
 async function resetAllData(){
   if(!confirm('전체 초기화할까요? (보관함 포함, 팀원 전체에게 반영됩니다)')) return;
@@ -136,9 +162,11 @@ function importAllJson(ev){
   reader.onload=async ()=>{
     try{
       state=Object.assign(defaultState(), JSON.parse(reader.result));
-      saveState(); // 담당자/센터 목록, 응대율 컬럼폭, 보관함 목록
+      // 복원은 사용자가 명시적으로 고른 백업 상태로 "그대로 되돌리기"이므로, 여기서만
+      // 목록류(담당자/센터/응대율 컬럼폭/보관함 목록/응대율 기본값)를 의도적으로 통째로 덮어쓴다.
+      await flushStateToServer();
       // 담당자별 실적/계획·취합본·응대율은 각자 키로 저장해야 서버에 실제 반영된다
-      // (saveState()는 목록류만 저장함 — 이걸 빠뜨리면 "복원됐다"는 화면만 보이고
+      // (flushStateToServer()는 목록류만 저장함 — 이걸 빠뜨리면 "복원됐다"는 화면만 보이고
       // 새로고침하면 서버에서 다시 불러오면서 사라진다).
       const entries = [];
       Object.keys(state.reports||{}).forEach(wk=>{

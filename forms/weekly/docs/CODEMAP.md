@@ -24,7 +24,7 @@
 | 작업 주제 | 파일 | 비고 |
 |---|---|---|
 | 주차 계산(1주=1일~그주 일요일, 이후 월~일) | `js/collect-dates.js` | `getWeeksOfMonth`, `weekMetaFromDate` |
-| 담당자/센터 기본값, 저장(Supabase `rpt_kv` 경유), 공용 헬퍼 | `js/collect-state.js` | `DEFAULT_MEMBERS`, `DEFAULT_CENTERS`, `loadState/saveState`, 저장키 접두어 `KP='ktis_v11__weekly'` |
+| 담당자/센터 기본값, 저장(Supabase `rpt_kv` 경유), 공용 헬퍼 | `js/collect-state.js` | `DEFAULT_MEMBERS`, `DEFAULT_CENTERS`, `loadState`, `mutateSharedList/Object`, 저장키 접두어 `KP='ktis_v11__weekly'` |
 | 워드 취합 규칙 엔진(가나다/○/※/괄호/소관센터 병합) | `js/collect-docword-rules.js` | `aggregateSection`, `tokenizeParens`, `docLinesToHtml` |
 | DOCX 실제 생성(표 구조·색상·폰트·자간) | `js/collect-docx-export.js` | `buildDocxBlob`, `wHeaderCell`, `wParagraph` — `../../shared/logo-data.js`의 `KT_LOGO_DATAURI` 사용 |
 | 메인 탭(취합 최종본·현황·주차이력) | `js/collect-main-panel.js` | `renderMainPanel`, `doAggregate`, `saveWordAndArchive` |
@@ -99,19 +99,43 @@ shared/kv-client.js → shared/auth.js → collect-dates.js → collect-state.js
 
 ## 5. 저장 키 (Supabase `rpt_kv`, `api/storage.js` 경유)
 
-**목록류(관리자 한 명이 주로 손대는 데이터)는 통째로 하나의 키**, **담당자/취합본/응대율처럼 여러 명이
-동시에 각자 다른 항목을 저장하는 데이터는 항목별로 키를 쪼갠다** — 안 그러면 A가 저장할 때 A의
-브라우저가 들고 있던 B의 (오래됐을 수 있는) 데이터까지 같이 덮어써서, A가 자기 것만 고쳤는데 B의
-내용까지 바뀌어 보이는 사고가 난다(2026-07-25 실제 발생, `collect-state.js`/`collect-member-panel.js`/
-`collect-main-panel.js`/`collect-rate-panel.js` 동시 수정으로 해결). **이 원칙을 절대 되돌리지 말 것.**
+**담당자/취합본/응대율처럼 여러 명이 동시에 각자 다른 항목을 저장하는 데이터는 항목별로 키를 쪼갠다**
+— 안 그러면 A가 저장할 때 A의 브라우저가 들고 있던 B의 (오래됐을 수 있는) 데이터까지 같이 덮어써서,
+A가 자기 것만 고쳤는데 B의 내용까지 바뀌어 보이는 사고가 난다(2026-07-25 실제 발생, `collect-state.js`/
+`collect-member-panel.js`/`collect-main-panel.js`/`collect-rate-panel.js` 동시 수정으로 해결).
+**이 원칙을 절대 되돌리지 말 것.**
+
+**담당자 목록/센터 목록/응대율 컬럼폭/자료보관함 목록/응대율 기본값 규칙 — 이 5개는 여전히 배열(또는
+객체) 전체가 키 하나에 들어있지만, 그렇다고 "통째로 덮어써도 되는 데이터"는 아니다.** 이 데이터는
+`loadState()`가 최초 접속 시 딱 한 번만 서버에서 불러오고 그 뒤로는 새로고침 전까지 갱신되지 않는다.
+그래서 예전에는 탭 전환처럼 아무것도 편집하지 않는 동작만으로도 `saveState()`(배열 전체를 로컬
+스냅샷으로 덮어쓰기)가 호출되어, 브라우저를 오래 켜둔 사람이 그 사이 다른 사람이 추가/수정한 내용을
+지워버리는 사고가 날 수 있었다(2026-07-27 실제 발생 및 수정). 지금은:
+
+- 순수 화면 이동(탭 전환, 히스토리 월 이동 등)은 서버 저장을 아예 호출하지 않는다.
+- 이 5개를 실제로 편집하는 모든 함수(`addMember`/`toggleMemberHide`/`deleteMember`/`saveMemberEdits`,
+  `addCenter(Inline)`/`toggleCenterHide`/`deleteCenter(Inline)`/`updateCenterField`/`moveCenter`/
+  `saveCenterEdits`, `startColResize`, `addRateDefault`/`deleteRateDefault`, `saveWordAndArchive`/
+  `deleteArchive`)는 `collect-state.js`의 `mutateSharedList(key, localFallback, mutateFn)` /
+  `mutateSharedObject(...)`를 통해 **쓰기 직전에 서버의 최신 값을 다시 읽어와 그 위에 의도한 변경
+  하나만 적용**한 뒤 저장한다 — 로컬에 오래 남아있던 스냅샷 전체를 절대 그대로 밀어넣지 않는다.
+  새로 이런 목록형 데이터를 추가/수정하는 함수를 만들 때도 반드시 이 패턴을 따를 것(브라우저가
+  들고 있는 로컬 배열을 직접 push/filter해서 통째로 저장하는 옛 패턴으로 되돌아가지 않는다).
+- `importAllJson`(백업 파일 복원)만 예외적으로 `flushStateToServer()`로 5개를 통째로 덮어쓴다 —
+  사용자가 명시적으로 "이 백업 상태 그대로 되돌리기"를 선택한 경우라 의도된 동작이다.
+- 두 사람이 완전히 같은 순간(네트워크 왕복 시간, 보통 수백ms 이내)에 이 5개 중 같은 것을 동시에
+  편집하는 경우는 여전히 나중 저장이 이길 수 있지만, "브라우저를 오래 켜둔 채 방치"로 인한 사고는
+  이 패턴으로 사실상 사라진다. 로컬 모의 서버로 "세션A가 오래된 스냅샷을 들고 있는 동안 세션B가
+  직접 센터를 추가 → 세션A가 자기 센터를 추가"하는 시나리오를 재현해 두 항목 모두 살아남는 것까지
+  확인함.
 
 | 데이터 | 저장 키 | 저장 위치(누가/언제 쓰는가) |
 |---|---|---|
-| 담당자 목록 | `ktis_v11__weekly_members` | `collect-manage-panel.js`, 배치 저장(`apiSetMany`, `flushStateToServer`) |
-| 센터 목록 | `ktis_v11__weekly_centers` | `collect-manage-panel.js`/`collect-rate-panel.js`, 배치 저장 |
-| 응대율 컬럼폭 | `ktis_v11__weekly_ratewidths` | `collect-rate-panel.js`, 배치 저장 |
-| 응대율 기본값 규칙(센터+기간+기본%) | `ktis_v11__weekly_ratedefaults` | `collect-rate-panel.js`의 `addRateDefault`/`deleteRateDefault`, 배치 저장 |
-| 자료보관함 목록(메타데이터만, base64 없음) | `ktis_v11__weekly_archive_index` | `collect-main-panel.js`, 배치 저장 |
+| 담당자 목록 | `ktis_v11__weekly_members` | `collect-manage-panel.js`, `mutateSharedList` |
+| 센터 목록 | `ktis_v11__weekly_centers` | `collect-manage-panel.js`/`collect-rate-panel.js`, `mutateSharedList` |
+| 응대율 컬럼폭 | `ktis_v11__weekly_ratewidths` | `collect-rate-panel.js`, `mutateSharedObject` |
+| 응대율 기본값 규칙(센터+기간+기본%) | `ktis_v11__weekly_ratedefaults` | `collect-rate-panel.js`의 `addRateDefault`/`deleteRateDefault`, `mutateSharedList` |
+| 자료보관함 목록(메타데이터만, base64 없음) | `ktis_v11__weekly_archive_index` | `collect-main-panel.js`/`collect-archive-panel.js`, `mutateSharedList` |
 | 자료보관함 실제 파일(base64, 항목별) | `ktis_v11__weekly_archive_item__{id}` | `collect-main-panel.js`의 `saveWordAndArchive` — 큰 값이라 `apiSet`이 필요하면 자동 청크 분할 |
 | 담당자별 실적/계획 (주차 단위) | `ktis_v11__weekly__rpt__{weekKey}__{memberId}` | `collect-member-panel.js`의 `saveMemberDraft` — **이 담당자 몫만** 저장 |
 | 취합본 (주차 단위) | `ktis_v11__weekly__agg__{weekKey}` | `collect-main-panel.js`의 `flushFinalEditNow`/`doAggregate` |
