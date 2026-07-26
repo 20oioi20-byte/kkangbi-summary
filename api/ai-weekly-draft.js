@@ -13,6 +13,11 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 // claude-sonnet-5는 Anthropic 직접호출 시 한글 응답이 간헐적으로 깨지는 문제가 깡비서 본체(api/chat.js)에서
 // 실측 확인됨 — 반드시 claude-sonnet-4-6 사용(본체와 동일 컨벤션).
 const CLAUDE_MODEL = process.env.CLAUDE_MODEL || 'claude-sonnet-4-6';
+// 깡비서 본체(api/chat.js)와 동일하게 서강대 API Gateway(월 제공 크레딧)를 먼저 시도하고,
+// 크레딧 소진/오류 등으로 실패하면 Anthropic 직접호출로 자동 전환한다.
+const GATEWAY_BASE = (process.env.SOGANG_GATEWAY_BASE || 'https://factchat-cloud.mindlogic.ai/v1/gateway').replace(/\/$/, '');
+const GATEWAY_KEY = process.env.SOGANG_GATEWAY_KEY || process.env.SOGANG_GATEWAY_API_KEY || '';
+const GATEWAY_MODEL = process.env.SOGANG_GATEWAY_MODEL || 'claude-sonnet-4-6';
 const KEY_PREFIX = 'ktis_v11__';
 const WL_ITEM_PREFIX = 'ktis_v11__worklog__';
 
@@ -122,6 +127,64 @@ function fmtList(arr, mapper) {
   return arr.length ? arr.map(mapper).join('\n') : '(자료 없음)';
 }
 
+// r.json()이 한글 등 멀티바이트 응답을 간헐적으로 깨뜨리는 사례가 있어(깡비서 본체 api/chat.js
+// 실측) 버퍼를 명시적으로 UTF-8 디코드한 뒤 파싱한다 — fetch 내부 인코딩 추정에 맡기지 않음.
+async function readJsonBuf(r) {
+  const buf = Buffer.from(await r.arrayBuffer());
+  return JSON.parse(buf.toString('utf8'));
+}
+/** 서강대 API Gateway(OpenAI 호환 /chat/completions)로 Claude 호출 — 월 제공 크레딧 소모.
+ * 깡비서 본체 api/chat.js의 callGateway와 동일한 방식. */
+async function callGatewayClaude({ system, userMessage }) {
+  const r = await fetch(`${GATEWAY_BASE}/chat/completions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': GATEWAY_KEY },
+    body: JSON.stringify({
+      model: GATEWAY_MODEL,
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: userMessage },
+      ],
+      max_tokens: 1500,
+    }),
+  });
+  if (!r.ok) {
+    const errText = await r.text().catch(() => '');
+    throw new Error(`Gateway error (status ${r.status}): ${errText.slice(0, 200)}`);
+  }
+  const data = await readJsonBuf(r);
+  const text = data?.choices?.[0]?.message?.content || '';
+  if (!text) throw new Error('Gateway returned empty content');
+  return text;
+}
+/** Anthropic 직접 호출 — 게이트웨이 미설정/실패 시 폴백. */
+async function callClaudeDirect({ system, userMessage }) {
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: CLAUDE_MODEL,
+      max_tokens: 1500,
+      // temperature는 일부러 안 보낸다 — 깡비서 본체(api/chat.js)에서 고정값을 보내면 최신
+      // 모델이 "temperature is deprecated for this model" 오류를 내는 걸 실측 확인해서 뺀 것.
+      system,
+      messages: [{ role: 'user', content: userMessage }],
+    }),
+  });
+  const data = await readJsonBuf(r);
+  if (!r.ok) {
+    const msg = data?.error?.message || `Claude error (status ${r.status})`;
+    throw new Error(msg);
+  }
+  const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text || '').join('').trim();
+  if (!text) throw new Error('Claude returned empty content');
+  return text;
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!SB_URL || !SB_KEY) return res.status(500).json({ error: 'Server missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY' });
@@ -199,31 +262,20 @@ ${fmtList(workLogs, w => `- ${w.date} [${WL_TYPE_LABEL[w.type] || w.type || ''}]
 
     const userPrompt = `${contextText}\n\n위 자료를 바탕으로 이번 주 실적과 다음 주 계획 초안을 작성해줘.`;
 
-    const aiRes = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: CLAUDE_MODEL,
-        max_tokens: 1500,
-        // temperature는 일부러 안 보낸다 — 깡비서 본체(api/chat.js)에서 고정값을 보내면 최신
-        // 모델이 "temperature is deprecated for this model" 오류를 내는 걸 실측 확인해서 뺀 것.
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userPrompt }],
-      }),
-    });
-    // r.json()이 한글 등 멀티바이트 응답을 간헐적으로 깨뜨리는 사례가 있어(깡비서 본체 api/chat.js
-    // 실측) 버퍼를 명시적으로 UTF-8 디코드한 뒤 파싱한다 — fetch 내부 인코딩 추정에 맡기지 않음.
-    const rawBuf = Buffer.from(await aiRes.arrayBuffer());
-    const aiData = JSON.parse(rawBuf.toString('utf8'));
-    if (!aiRes.ok) {
-      const msg = (aiData && aiData.error && aiData.error.message) || `Claude error (status ${aiRes.status})`;
-      return res.status(502).json({ error: msg });
+    // 깡비서 본체와 동일하게: 게이트웨이(SOGANG_GATEWAY_KEY 설정 시) 먼저 시도 → 실패하면
+    // Anthropic 직접호출로 조용히 전환. 사용자에게는 결과만 보이면 된다.
+    let text;
+    if (GATEWAY_KEY) {
+      try {
+        text = await callGatewayClaude({ system: systemPrompt, userMessage: userPrompt });
+      } catch (gwErr) {
+        console.error('[ai-weekly-draft] 게이트웨이 실패, Claude 직접 호출로 전환:', gwErr.message);
+        text = await callClaudeDirect({ system: systemPrompt, userMessage: userPrompt });
+      }
+    } else {
+      text = await callClaudeDirect({ system: systemPrompt, userMessage: userPrompt });
     }
-    const text = (aiData.content || []).filter(b => b.type === 'text').map(b => b.text || '').join('').trim();
+
     const perfMatch = text.match(/===\s*실적\s*===([\s\S]*?)(===\s*계획\s*===|$)/);
     const planMatch = text.match(/===\s*계획\s*===([\s\S]*)$/);
     const perf = perfMatch ? perfMatch[1].trim() : text.trim();
