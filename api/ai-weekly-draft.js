@@ -1,17 +1,22 @@
 // "깡비서 초안" — 강성호(m1) 전용 AI 초안 생성.
-// 깡비서.kr 캘린더(ktis_v11__events__{year})/일일보고(ktis_v11__reports)/업무로그(mt_meetings,
-// mt_calls, mt_reports) + 이 시스템의 직전 주 강성호 작성 데이터를 모아 Claude에게 실적/계획
+// 깡비서.kr 캘린더/일일보고/업무로그(실제 운영 코드 C:\Users\user\kkangbi-calendar 기준으로
+// 스키마 확인, 2026-07-26) + 이 시스템의 직전 주 강성호 작성 데이터를 모아 Claude에게 실적/계획
 // 초안을 만들게 한다. 다른 담당자는 깡비서에 본인 데이터가 없어 이 기능을 쓰지 않는다
 // (클라이언트도 m1에만 버튼을 노출하지만, 이 파일 자체가 항상 강성호 관련 자료만 조회한다 —
 // memberId를 파라미터로 받지 않음).
 //
-// 자료 조회가 일부 실패해도(예: 해당 연도 이벤트 없음, 테이블 없음) 전체 요청을 실패시키지
-// 않는다 — 있는 자료만으로 초안을 만들고, 부족하면 AI가 "(확인 필요)"로 표시하도록 지시한다.
+// 자료 조회가 일부 실패해도(예: 해당 월 이벤트 없음) 전체 요청을 실패시키지 않는다 — 있는
+// 자료만으로 초안을 만들고, 부족하면 AI가 "(확인 필요)"로 표시하도록 지시한다.
 const SB_URL = process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+// claude-sonnet-5는 Anthropic 직접호출 시 한글 응답이 간헐적으로 깨지는 문제가 깡비서 본체(api/chat.js)에서
+// 실측 확인됨 — 반드시 claude-sonnet-4-6 사용(본체와 동일 컨벤션).
 const CLAUDE_MODEL = process.env.CLAUDE_MODEL || 'claude-sonnet-4-6';
 const KEY_PREFIX = 'ktis_v11__';
+const WL_ITEM_PREFIX = 'ktis_v11__worklog__';
+
+const WL_TYPE_LABEL = { meeting: '회의', call: '통화', report: '보고', mail: '메일', meet: '미팅', memo: '메모' };
 
 function isAllowedKey(key) {
   return typeof key === 'string' && key.startsWith(KEY_PREFIX);
@@ -27,31 +32,91 @@ async function sbFetch(path, init) {
     },
   });
 }
-async function sbGetKV(key) {
-  if (!isAllowedKey(key)) return null;
+async function sbListRaw(prefix) {
   try {
-    const r = await sbFetch(`/rest/v1/rpt_kv?key=eq.${encodeURIComponent(key)}&select=value`);
-    if (!r.ok) return null;
-    const rows = await r.json();
-    return rows[0] ? JSON.parse(rows[0].value) : null;
-  } catch (e) { return null; }
-}
-async function sbGetTable(table, qs) {
-  try {
-    const r = await sbFetch(`/rest/v1/${table}?${qs}`);
+    const r = await sbFetch(`/rest/v1/rpt_kv?key=like.${encodeURIComponent(prefix)}*&select=key,value`);
     if (!r.ok) return [];
     const rows = await r.json();
     return Array.isArray(rows) ? rows : [];
   } catch (e) { return []; }
 }
+async function sbGetRaw(key) {
+  if (!isAllowedKey(key)) return null;
+  try {
+    const r = await sbFetch(`/rest/v1/rpt_kv?key=eq.${encodeURIComponent(key)}&select=value`);
+    if (!r.ok) return null;
+    const rows = await r.json();
+    return rows[0] ? rows[0].value : null;
+  } catch (e) { return null; }
+}
+// 깡비서 플랫폼은 값이 크면 {key}__chunk__{i} 조각 + 매니페스트({__chunked:true,n,len})로 나눠
+// 저장한다(이 프로젝트 shared/kv-client.js와 동일 방식) — 그대로 재조립해야 실제 값을 읽을 수 있다.
+function looksChunked(v) {
+  return typeof v === 'string' && v.length < 200 && v.indexOf('"__chunked"') >= 0;
+}
+async function resolveManifest(key, raw) {
+  try {
+    const mf = JSON.parse(raw);
+    if (!(mf && mf.__chunked === true && mf.n > 0)) return JSON.parse(raw);
+    const chunkRows = await sbListRaw(`${key}__chunk__`);
+    const pieces = {};
+    chunkRows.forEach(r => { const m = /__chunk__(\d+)$/.exec(r.key || ''); if (m) pieces[+m[1]] = r.value; });
+    let full = '';
+    for (let i = 0; i < mf.n; i++) { if (pieces[i] === undefined) return null; full += pieces[i]; }
+    return JSON.parse(full);
+  } catch (e) { return null; }
+}
+async function sbGetKV(key) {
+  const raw = await sbGetRaw(key);
+  if (raw == null) return null;
+  if (looksChunked(raw)) return resolveManifest(key, raw);
+  try { return JSON.parse(raw); } catch (e) { return null; }
+}
+// prefix로 여러 항목을 한 번에 읽고, 청크로 나뉜 항목은 병합해서 돌려준다(항목별 업무로그 등).
+async function listResolvedKV(prefix) {
+  const rows = await sbListRaw(prefix);
+  const chunkMap = {}; // baseKey -> {idx: value}
+  const baseRows = [];
+  rows.forEach(row => {
+    const m = /^(.+)__chunk__(\d+)$/.exec(row.key || '');
+    if (m) { const bk = m[1], idx = +m[2]; if (!chunkMap[bk]) chunkMap[bk] = {}; chunkMap[bk][idx] = row.value; }
+    else baseRows.push(row);
+  });
+  const out = [];
+  for (const row of baseRows) {
+    let value = row.value;
+    if (looksChunked(value)) {
+      try {
+        const mf = JSON.parse(value);
+        if (mf && mf.__chunked === true && mf.n > 0) {
+          const pieces = chunkMap[row.key] || {};
+          let full = ''; let ok = true;
+          for (let i = 0; i < mf.n; i++) { if (pieces[i] === undefined) { ok = false; break; } full += pieces[i]; }
+          value = ok ? full : null;
+        }
+      } catch (e) { /* not actually a manifest, keep raw */ }
+    }
+    if (value == null) continue;
+    try { out.push({ key: row.key, value: JSON.parse(value) }); } catch (e) { /* skip unparsable */ }
+  }
+  return out;
+}
+
 function inRange(dateStr, start, end) {
   if (!dateStr) return false;
   const d = String(dateStr).slice(0, 10);
   return d >= start && d <= end;
 }
-function joinBullets(v) {
-  if (!v) return '';
-  return Array.isArray(v) ? v.join('; ') : String(v);
+function monthKeysInRange(start, end) {
+  const keys = [];
+  let [y, m] = start.slice(0, 7).split('-').map(Number);
+  const [ey, em] = end.slice(0, 7).split('-').map(Number);
+  let guard = 0;
+  while ((y < ey || (y === ey && m <= em)) && guard++ < 24) {
+    keys.push(`${y}-${String(m).padStart(2, '0')}`);
+    m++; if (m > 12) { m = 1; y++; }
+  }
+  return keys;
 }
 function fmtList(arr, mapper) {
   return arr.length ? arr.map(mapper).join('\n') : '(자료 없음)';
@@ -63,32 +128,41 @@ export default async function handler(req, res) {
   if (!ANTHROPIC_API_KEY) return res.status(500).json({ error: 'Server missing ANTHROPIC_API_KEY' });
 
   try {
-    const { weekKey, prevWeekKey, year, perfStart, perfEnd, planStart, planEnd } = req.body || {};
+    const { weekKey, prevWeekKey, perfStart, perfEnd, planStart, planEnd } = req.body || {};
     if (!weekKey || !perfStart || !perfEnd || !planStart || !planEnd) {
       return res.status(400).json({ error: 'missing required fields' });
     }
     const windowStart = perfStart < planStart ? perfStart : planStart;
     const windowEnd = perfEnd > planEnd ? perfEnd : planEnd;
 
-    const years = new Set([Number(year), Number(String(planEnd).slice(0, 4))]);
+    // 1) 캘린더 일정 — 월별 키(ktis_v11__events__{YYYY-MM})
+    const months = monthKeysInRange(windowStart, windowEnd);
     let events = [];
-    for (const y of years) {
-      const arr = await sbGetKV(`ktis_v11__events__${y}`);
+    for (const mk of months) {
+      const arr = await sbGetKV(`ktis_v11__events__${mk}`);
       if (Array.isArray(arr)) events.push(...arr);
     }
     events = events.filter(e => inRange(e && e.date, windowStart, windowEnd));
 
+    // 2) 일일보고 (ktis_v11__reports.dailyReports)
     const reportsBlob = await sbGetKV('ktis_v11__reports');
     const dailyReports = (reportsBlob && Array.isArray(reportsBlob.dailyReports))
       ? reportsBlob.dailyReports.filter(r => inRange(r && r.date, windowStart, windowEnd))
       : [];
 
-    const [meetings, calls, workReports] = await Promise.all([
-      sbGetTable('mt_meetings', `select=title,meeting_date,summary_bullets,center,status&meeting_date=gte.${windowStart}&meeting_date=lte.${windowEnd}&order=meeting_date.desc&limit=80`),
-      sbGetTable('mt_calls', `select=call_datetime,summary_bullets,center,counterpart_name,status&call_datetime=gte.${windowStart}&call_datetime=lte.${windowEnd}&order=call_datetime.desc&limit=80`),
-      sbGetTable('mt_reports', `select=title,report_date,summary,center&report_date=gte.${windowStart}&report_date=lte.${windowEnd}&order=report_date.desc&limit=80`),
-    ]);
+    // 3) 업무로그 — 구 통합 키(ktis_v11__worklogs) + 항목별 키(ktis_v11__worklog__{id}) 병합,
+    //    항목별이 우선(같은 id면 항목별 값으로 덮어씀) — 깡비서 본체 storage.js와 동일한 병합 규칙.
+    const wlAgg = await sbGetKV('ktis_v11__worklogs');
+    const wlItems = await listResolvedKV(WL_ITEM_PREFIX);
+    const wlMap = new Map();
+    ((wlAgg && wlAgg.workLogs) || []).forEach(w => { if (w && w.id) wlMap.set(w.id, w); });
+    wlItems.forEach(({ value: w }) => { if (w && w.id) wlMap.set(w.id, w); });
+    const workLogs = [...wlMap.values()]
+      .filter(w => inRange(w && w.date, windowStart, windowEnd))
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+      .slice(0, 100);
 
+    // 4) 이 시스템의 직전 주 강성호 작성 내용
     const prevReport = prevWeekKey ? await sbGetKV(`ktis_v11__weekly__rpt__${prevWeekKey}__m1`) : null;
 
     const contextText = `
@@ -98,14 +172,8 @@ ${fmtList(events, e => `- ${e.date}${e.time ? ' ' + e.time : ''} ${e.title || ''
 [일일보고]
 ${fmtList(dailyReports, r => `- ${r.date}: ${r.content || ''}`)}
 
-[업무로그 - 미팅]
-${fmtList(meetings, m => `- ${m.meeting_date} [${m.center || ''}] ${m.title || ''}${m.summary_bullets ? ' : ' + joinBullets(m.summary_bullets) : ''}`)}
-
-[업무로그 - 통화]
-${fmtList(calls, c => `- ${c.call_datetime} [${c.center || ''}] ${c.counterpart_name || ''}${c.summary_bullets ? ' : ' + joinBullets(c.summary_bullets) : ''}`)}
-
-[업무로그 - 보고]
-${fmtList(workReports, r => `- ${r.report_date} [${r.center || ''}] ${r.title || ''}${r.summary ? ' : ' + r.summary : ''}`)}
+[업무로그]
+${fmtList(workLogs, w => `- ${w.date} [${WL_TYPE_LABEL[w.type] || w.type || ''}]${w.center ? ' ' + w.center : ''} ${w.title || ''}${(w.oneLiner || w.aiSummary) ? ' : ' + (w.oneLiner || w.aiSummary) : ''}${w.followUp ? ' (후속: ' + w.followUp + ')' : ''}${w.nextMeeting ? ' (다음 일정: ' + w.nextMeeting + ')' : ''}`)}
 
 [직전 주(${prevWeekKey || '없음'}) 본인이 작성한 주간보고]
 실적: ${prevReport && prevReport.perf ? prevReport.perf : '(없음)'}
@@ -141,17 +209,21 @@ ${fmtList(workReports, r => `- ${r.report_date} [${r.center || ''}] ${r.title ||
       body: JSON.stringify({
         model: CLAUDE_MODEL,
         max_tokens: 1500,
-        temperature: 0.4,
+        // temperature는 일부러 안 보낸다 — 깡비서 본체(api/chat.js)에서 고정값을 보내면 최신
+        // 모델이 "temperature is deprecated for this model" 오류를 내는 걸 실측 확인해서 뺀 것.
         system: systemPrompt,
         messages: [{ role: 'user', content: userPrompt }],
       }),
     });
+    // r.json()이 한글 등 멀티바이트 응답을 간헐적으로 깨뜨리는 사례가 있어(깡비서 본체 api/chat.js
+    // 실측) 버퍼를 명시적으로 UTF-8 디코드한 뒤 파싱한다 — fetch 내부 인코딩 추정에 맡기지 않음.
+    const rawBuf = Buffer.from(await aiRes.arrayBuffer());
+    const aiData = JSON.parse(rawBuf.toString('utf8'));
     if (!aiRes.ok) {
-      const detail = await aiRes.text();
-      return res.status(502).json({ error: 'AI 호출 실패', detail });
+      const msg = (aiData && aiData.error && aiData.error.message) || `Claude error (status ${aiRes.status})`;
+      return res.status(502).json({ error: msg });
     }
-    const aiData = await aiRes.json();
-    const text = (aiData.content && aiData.content[0] && aiData.content[0].text) || '';
+    const text = (aiData.content || []).filter(b => b.type === 'text').map(b => b.text || '').join('').trim();
     const perfMatch = text.match(/===\s*실적\s*===([\s\S]*?)(===\s*계획\s*===|$)/);
     const planMatch = text.match(/===\s*계획\s*===([\s\S]*)$/);
     const perf = perfMatch ? perfMatch[1].trim() : text.trim();

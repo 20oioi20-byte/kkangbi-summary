@@ -135,16 +135,19 @@ shared/kv-client.js → shared/auth.js → collect-dates.js → collect-state.js
 
 ---
 
-## 6. AI 초안("깡비서 초안") — 강성호(m1) 전용 (2026-07-26 추가)
+## 6. AI 초안("깡비서 초안") — 강성호(m1) 전용 (2026-07-26 추가, 07-27 실제 스키마로 재검증)
 
 - **위치/명칭**: 담당자 탭 중 강성호(m1) 탭에서만, 실적 입력란 라벨 오른쪽 위에 "🤖 깡비서 초안" 버튼. 클릭하면 실적+계획을 한 번에 채운다(자동 저장 안 함 — 확인 후 「이번 주차 저장」을 눌러야 반영).
 - **다른 담당자에는 절대 넣지 않는다** — 깡비서.kr에 본인 데이터가 있는 건 강성호뿐이라는 게 전제. `renderMemberPanel`에서 `memberId==='m1'` 조건으로 버튼 자체를 렌더링 안 하고, `generateAiDraft`도 첫 줄에서 `memberId!=='m1'`이면 즉시 return.
-- **자료 출처** (`api/ai-weekly-draft.js`가 서버에서 조회, 클라이언트는 기간만 넘김):
-  - 캘린더 일정: `ktis_v11__events__{year}` (rpt_kv, 깡비서 캘린더 앱과 **같은 Supabase 프로젝트** 전제)
-  - 일일보고: `ktis_v11__reports`의 `dailyReports` 배열
-  - 업무로그: `mt_meetings`/`mt_calls`/`mt_reports` 테이블 (rpt_kv 아님, 일반 Postgres 테이블 직접 조회)
+- **자료 출처** (`api/ai-weekly-draft.js`가 서버에서 조회, 클라이언트는 기간만 넘김) — `C:\Users\user\kkangbi-calendar`의 실제 운영 코드(`js/storage.js`, `js/worklog.js`, `js/calendar-helpers.js`)로 스키마 확인·검증 완료:
+  - 캘린더 일정: `ktis_v11__events__{YYYY-MM}` (**월 단위** 키, 연도 단위 아님 — `evMonthKey()` 기준). 이벤트 필드: `title/date/time/memo` 등
+  - 일일보고: `ktis_v11__reports`의 `dailyReports` 배열 (`{id,date,content,createdAt}`)
+  - 업무로그: `ktis_v11__worklogs`(구 통합키) + `ktis_v11__worklog__{id}`(신 항목별 키)를 id로 병합, **항목별 키가 우선**(깡비서 본체 `storage.js`와 동일한 병합 규칙) — rpt_kv이지 별도 Postgres 테이블 아님. 필드: `date/type/center/title/oneLiner/aiSummary/followUp/nextMeeting`
   - 이 시스템 자체의 직전 주 강성호 작성분: `ktis_v11__weekly__rpt__{prevWeekKey}__m1`
+  - 위 세 rpt_kv 키 모두 **깡비서 본체와 동일한 청크 분할 방식**(`{key}__chunk__{i}` + `{__chunked:true,n,len}` 매니페스트)으로 저장돼 있을 수 있어, `sbGetKV`/`listResolvedKV`가 이를 그대로 재조립한다 — 이 재조립 로직 없이 값을 그냥 읽으면 큰 항목(업무로그 통합본 등)이 매니페스트 객체만 읽혀서 내용이 빈 것처럼 보이니 절대 빼지 말 것.
 - 위 자료 중 일부가 없거나 조회 실패해도 전체를 실패시키지 않는다 — 있는 자료만으로 초안을 만들고, AI에게 "근거 없으면 (확인 필요)로 표시"하도록 지시해뒀다.
 - AI 응답은 `===실적===`/`===계획===` 마커로 나눠서 파싱한다 — 이 마커 문구를 시스템 프롬프트에서 임의로 바꾸면 파싱이 깨지니 같이 맞출 것.
-- **필요 환경변수**: `ANTHROPIC_API_KEY`(신규, Vercel에 추가 필요), `CLAUDE_MODEL`(선택, 기본값 `claude-sonnet-4-6` — `claude-sonnet-5`는 한글 인코딩 깨짐 이슈로 깡비서 전체에서 금지, `docs/NEW-FORM-GUIDE.md` §3.3 참고). `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`는 `api/storage.js`와 동일한 것 재사용.
-- **확인 필요(다음 세션 과제)**: 이 프로젝트의 Supabase 프로젝트가 깡비서 캘린더 앱과 실제로 동일한지 아직 실제 배포 환경에서 검증 못함(로컬 모의 서버로는 API 호출 자체 흐름만 검증했고, 실제 캘린더/업무로그 데이터 조회는 확인 못함) — 실사용해보고 자료가 하나도 안 딸려오면 이 부분부터 확인할 것.
+- Anthropic 응답은 `res.json()` 대신 버퍼를 UTF-8로 직접 디코드해서 파싱한다(깡비서 본체 `api/chat.js`에서 한글 응답이 간헐적으로 깨지는 문제 실측 확인, 동일 대응). `temperature` 파라미터도 일부러 안 보낸다(최신 모델에서 오류 유발 확인됨).
+- **필요 환경변수**: `ANTHROPIC_API_KEY`(신규, Vercel에 추가 필요 — 깡비서 본체(kkangbi-calendar) Vercel 프로젝트에 이미 있어도 이 프로젝트(kkangbi-summary)는 별도 Vercel 프로젝트라 따로 등록해야 함), `CLAUDE_MODEL`(선택, 기본값 `claude-sonnet-4-6`). `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`는 `api/storage.js`와 동일한 것 재사용(깡비서 캘린더 앱과 같은 Supabase 프로젝트 공유 확인됨).
+- 위 스키마 전체를 가짜 Supabase/Anthropic 응답으로 로컬 검증 완료(월 경계를 넘는 이벤트 병합, 청크 재조립, 구/신 업무로그 병합 우선순위, 마커 파싱까지) — 스크래치패드 `test-ai-draft.mjs` 패턴 참고. 실제 배포 후 남은 건 실사용 확인뿐.
+- **선택적으로 더 할 수 있는 것**: 깡비서 본체 `api/chat.js`는 서강대 API Gateway(`SOGANG_GATEWAY_KEY`)를 먼저 시도하고 실패 시에만 Anthropic 직접호출로 폴백하는 구조(월 제공 크레딧 절약). 이 파일은 지금 직접호출만 한다 — 게이트웨이 크레딧을 이 양식에도 공유하고 싶다면 별도 요청 필요(크레덴셜 공유 여부는 사용자 판단 필요).
