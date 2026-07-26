@@ -14,11 +14,25 @@ function effectiveRateValue(centerId, ry, rm, weekIdx, row){
   return def!=null ? def : '';
 }
 
+// 응대율 표시 월 초기값 보정 — 상단 월 이동바(renderRateMonthNavBar)와 본문 표(renderRatePanel)가
+// 둘 다 state._rateMonth를 참조하므로, 어느 쪽이 먼저 렌더링되든 안전하게 공용으로 뽑아둔다.
+function ensureRateMonth(){
+  if(!state._rateMonth){ const meta=currentMeta(); state._rateMonth = {y:meta.year, m:meta.month}; }
+  return state._rateMonth;
+}
+// 상단 공용 툴바(week-bar)에 들어가는 응대율 월 이동 컨트롤 — 응대율 탭일 때만
+// "기준 주차" 자리 대신 표시된다(renderAll에서 토글).
+function renderRateMonthNavBar(){
+  const {y:ry, m:rm} = ensureRateMonth();
+  return `
+    <span class="rate-nav-label">📊 응대율 (월 단위)</span>
+    <button class="nav-btn" type="button" onclick="shiftRateMonth(-1)" title="이전 달">‹</button>
+    <div class="rate-nav-month">${ry}년 ${rm}월</div>
+    <button class="nav-btn" type="button" onclick="shiftRateMonth(1)" title="다음 달">›</button>`;
+}
 function renderRatePanel(){
   const meta = currentMeta();
-  // 응대율 표시 월 = 기준 주차의 월
-  if(!state._rateMonth){ state._rateMonth = {y:meta.year, m:meta.month}; }
-  const ry = state._rateMonth.y, rm = state._rateMonth.m;
+  const {y:ry, m:rm} = ensureRateMonth();
   const monthKey = `${ry}-${pad2(rm)}`;
   const weeks = getWeeksOfMonth(ry, rm);
   const monthShort = `${String(ry).slice(2)}.${rm}월`;
@@ -117,12 +131,8 @@ function renderRatePanel(){
 
   return `
   <div class="card">
-    <h2>📊 응대율 (월 단위)</h2>
-    <div class="month-nav">
-      <button class="nav-btn" type="button" onclick="shiftRateMonth(-1)">‹</button>
-      <div class="lab">${ry}년 ${rm}월</div>
-      <button class="nav-btn" type="button" onclick="shiftRateMonth(1)">›</button>
-    </div>
+    <!-- 📊 응대율(월 단위) 제목·월 이동 컨트롤은 상단 툴바(week-bar)의 "기준 주차" 자리로
+         옮겨졌다 — renderRateMonthNavBar() 참고. 이 탭이 열려있을 때만 그 자리에 표시된다. -->
     <p class="hint">
       숫자만 입력해도 %가 자동으로 붙습니다. 표 안에서 <b>담당자·센터명을 바로 수정</b>하고, <b>▲▼</b>로 순서를 변경하고, <b>+ 센터 추가</b>로 새 줄을 만들 수 있습니다.<br>
       <b>컬럼 경계선에 마우스를 올려 드래그하면 폭을 직접 조절</b>할 수 있습니다. 비고칸은 내용이 길면 …으로 줄여 표시되며, 클릭하면 전체 내용이 펼쳐집니다.
@@ -179,13 +189,26 @@ function renderRateDefaultsPanel(meta){
   const wOpts = (sel) => [1,2,3,4,5,6].map(w=>`<option value="${w}" ${w===sel?'selected':''}>${w}주차</option>`).join('');
   const centerOpts = state.centers.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
 
-  const rules = (state.rateDefaults||[]).length ? `<div class="rd-rules-list">${state.rateDefaults.map(r=>{
+  // 규칙이 10개를 넘으면 스크롤 대신 페이지 단위로 넘겨본다(자료보관함 탭과 동일한 페이징 패턴).
+  const RD_PAGE_SIZE = 10;
+  const allRules = state.rateDefaults||[];
+  const rdPages = Math.max(1, Math.ceil(allRules.length / RD_PAGE_SIZE));
+  if(!state._rdPage || state._rdPage < 1) state._rdPage = 1;
+  if(state._rdPage > rdPages) state._rdPage = rdPages;
+  const rdPageRules = allRules.slice((state._rdPage-1)*RD_PAGE_SIZE, state._rdPage*RD_PAGE_SIZE);
+
+  const rules = allRules.length ? `<div class="rd-rules-list">${rdPageRules.map(r=>{
     const c = centerById(r.centerId);
     return `<div class="rd-rule-row">
       <span class="rd-rule-text" title="${escapeHtml(c?c.name:'(삭제된 센터)')} · ${r.sy}.${r.sm}월${r.sw}주 ~ ${r.ey}.${r.em}월${r.ew}주 · ${escapeHtml(r.value)}%">${escapeHtml(c?c.name:'(삭제된 센터)')} · ${r.sy}.${r.sm}월${r.sw}주 ~ ${r.ey}.${r.em}월${r.ew}주 · <b>${escapeHtml(r.value)}%</b></span>
       <button class="btn-link" style="color:#a33;" onclick="deleteRateDefault('${r.id}')">삭제</button>
     </div>`;
-  }).join('')}</div>` : `<div class="empty" style="padding:14px;font-size:12px;">등록된 기본값 규칙이 없습니다.</div>`;
+  }).join('')}</div>${rdPages>1 ? `
+    <div class="pager">
+      <button class="nav-btn" type="button" onclick="shiftRdPage(-1)" ${state._rdPage<=1?'disabled':''}>‹</button>
+      <span>${state._rdPage} / ${rdPages} 페이지 (총 ${allRules.length}개)</span>
+      <button class="nav-btn" type="button" onclick="shiftRdPage(1)" ${state._rdPage>=rdPages?'disabled':''}>›</button>
+    </div>` : ''}` : `<div class="empty" style="padding:14px;font-size:12px;">등록된 기본값 규칙이 없습니다.</div>`;
 
   return `
   <div class="card rate-defaults-card">
@@ -230,6 +253,8 @@ function addRateDefault(){
   if(!state.rateDefaults) state.rateDefaults = [];
   state.rateDefaults.push({id:'rd'+Date.now(), centerId, startKey, endKey, sy, sm, sw, ey, em, ew, value});
   saveState();
+  // 새로 추가한 규칙이 바로 보이도록 마지막 페이지로 이동
+  state._rdPage = Math.max(1, Math.ceil(state.rateDefaults.length / 10));
   flash('기본값 규칙이 저장되었습니다');
   renderAll();
 }
@@ -237,6 +262,10 @@ function deleteRateDefault(id){
   if(!confirm('이 기본값 규칙을 삭제할까요?')) return;
   state.rateDefaults = (state.rateDefaults||[]).filter(r=>r.id!==id);
   saveState();
+  renderAll(); // 삭제로 페이지가 남으면 renderRateDefaultsPanel의 클램프 로직이 자동으로 보정
+}
+function shiftRdPage(delta){
+  state._rdPage = (state._rdPage||1) + delta;
   renderAll();
 }
 function setRateMemberFilter(val){

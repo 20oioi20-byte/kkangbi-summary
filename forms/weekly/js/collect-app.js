@@ -61,10 +61,16 @@ function renderAll(){
   // 사고가 났었다(2026-07-25). 초안을 남겨야 하는 곳(switchTab, shiftWeek 등)은
   // activeTab을 바꾸기 전에 각자 flushMemberDraft()를 직접 호출한다.
   renderTabs();
-  // 응대율 탭은 월 단위(자체 월 이동 컨트롤)라 상단 "기준 주차" 네비게이션은 의미가 없어 숨긴다 —
-  // 두 개의 날짜 이동 UI가 동시에 보여서 헷갈리는 것을 방지.
+  // 응대율 탭은 월 단위(자체 월 이동 컨트롤)라 상단 "기준 주차" 네비게이션은 의미가 없어 숨기고,
+  // 그 자리에 응대율 월 이동 컨트롤을 대신 채운다(두 개의 날짜 이동 UI가 동시에 보여서 헷갈리는 것을 방지).
+  const isRate = state.activeTab==='rate';
   const weekNavGroup = document.getElementById('weekNavGroup');
-  if(weekNavGroup) weekNavGroup.style.display = (state.activeTab==='rate') ? 'none' : 'flex';
+  if(weekNavGroup) weekNavGroup.style.display = isRate ? 'none' : 'flex';
+  const rateMonthNavGroup = document.getElementById('rateMonthNavGroup');
+  if(rateMonthNavGroup){
+    rateMonthNavGroup.style.display = isRate ? 'flex' : 'none';
+    rateMonthNavGroup.innerHTML = isRate ? renderRateMonthNavBar() : '';
+  }
   const panels=document.getElementById('panels');
   let html='';
   html += `<div class="panel ${state.activeTab==='main'?'active':''}">${state.activeTab==='main'?renderMainPanel():''}</div>`;
