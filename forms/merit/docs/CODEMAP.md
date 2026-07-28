@@ -20,36 +20,58 @@ AI가 3개 섹션 초안을 만들고, 사용자가 확인·수정한 뒤 **원�
 
 ---
 
-## 2. 파일 지도
+## 2. 화면 구성 (탭 3개)
+
+| 탭 | 내용 |
+|---|---|
+| 📄 공적조서 | 목록(검색·센터 필터·수상여부 필터·수상 체크·복제·삭제) ↔ 편집 |
+| 🏆 수상자 명단 | 연도/성명/직책/센터/담당자/비고 표 · 검색 · 연도·센터 필터 |
+| 🏢 센터 관리 | 이 양식 전용 센터 목록 추가·수정·삭제 · 주간보고 센터 가져오기 |
+
+편집 화면 맨 위에는 **화면에 고정되는(sticky) 「← 목록으로」 바**가 있어 작성 도중 언제든 돌아갈 수 있다.
+탭을 옮기거나 목록으로 돌아가도 입력 중이던 값은 `collectFormIntoRecord()`로 보존된다(저장은 별도).
+
+---
+
+## 3. 파일 지도
 
 | 무엇을 고칠 때 | 파일 | 핵심 |
 |---|---|---|
-| 저장 키·상태·팀원 명단 로딩 | `js/merit-state.js` | `loadMeritState`, `saveCurrent`, `deleteRecord`, `mutateIndex` |
-| 화면·AI 초안 호출 | `js/merit-app.js` | `renderList`, `renderEditor`, `generateMeritDraft`, `collectFormIntoRecord` |
+| 저장 키·상태·목록/수상자/센터 CRUD | `js/merit-state.js` | `loadMeritState`, `saveCurrent`, `duplicateRecord`, `toggleAwarded`, `saveAward`, `mutateShared` |
+| 화면·필터·AI 초안 호출 | `js/merit-app.js` | `renderList`, `renderEditor`, `renderAwards`, `renderCenters`, `generateMeritDraft` |
 | **워드(.docx) 생성 서식** | `js/merit-docx.js` | `buildMeritDocxBlob`, `MERIT_GRID`, `mSpans` |
 | 화면 스타일 | `css/merit.css` | — |
-| AI 프롬프트·모델 | `../../api/ai-merit-draft.js` | 섹션별 역할·형식 규칙·핵심가치 |
+| AI 프롬프트·모델 | `../../api/ai-merit-draft.js` | 섹션별 역할·형식 규칙·핵심가치·참고예시 처리 |
 
 스크립트 로드 순서(= `index.html`): kv-client → auth → logo-data → merit-state → merit-docx → merit-app.
 
 ---
 
-## 3. 저장 키
+## 4. 저장 키
 
 허브 규칙(`docs/HUB-CODEMAP.md` §5) "엔티티 1건 = 저장 키 1개"를 따른다.
 
 | 데이터 | 키 | 비고 |
 |---|---|---|
-| 공적조서 목록 | `ktis_v11__merit_index` | **메타데이터만**(id/성명/직급/소속/수정일). 본문 절대 넣지 말 것 |
+| 공적조서 목록 | `ktis_v11__merit_index` | **메타데이터만**(성명/직급/센터/담당자/수상여부/수정일). 본문 절대 넣지 말 것 |
 | 공적조서 1건 | `ktis_v11__merit__rec__{id}` | 전체 내용 |
-| (읽기 전용) 팀원 명단 | `ktis_v11__weekly_members` | 주간보고 양식 소유. **이 양식에서 쓰지 않는다** |
+| 표창 수상자 1명 | `ktis_v11__merit_award__{id}` | 항목이 작아 `apiList(prefix)` 한 번으로 전부 읽는다 |
+| 이 양식의 센터 목록 | `ktis_v11__merit_centers` | 최초 1회 주간보고 센터로 씨앗을 심고, 이후 독립 관리 |
+| (읽기 전용) 팀원 명단 | `ktis_v11__weekly_members` | 주간보고 소유. **쓰지 않는다** |
+| (읽기 전용) 주간보고 센터 | `ktis_v11__weekly_centers` | 주간보고 소유. **쓰지 않는다** |
 
-목록은 `mutateIndex()`로만 갱신한다 — 저장 직전 서버 최신값을 다시 읽고 내 변경만 얹는 방식.
+배열형(목록·센터)은 `mutateShared()`로만 갱신한다 — 저장 직전 서버 최신값을 다시 읽고 내 변경만 얹는 방식.
 브라우저를 오래 켜둔 사람이 옛 스냅샷을 통째로 덮어써 남의 항목을 지우는 사고를 막기 위함.
+
+### 센터를 왜 따로 갖고 있나 (중요)
+주간보고의 `ktis_v11__weekly_centers`에 직접 쓰면 **주간보고 응대율 표에 행이 생겨버린다**(그 표는
+보이는 센터마다 한 행을 그린다). 그래서 이 양식은 자기 센터 목록을 따로 두고, 주간보고 것은
+「주간보고 센터 가져오기」(`syncCentersFromWeekly`)로 **없는 것만 합치기만** 한다. 이 분리를 되돌려
+주간보고 키에 직접 쓰지 말 것 — 로컬 검증에서 주간보고 목록이 오염되지 않는 것을 확인했다.
 
 ---
 
-## 4. 워드 서식 — 원본 .doc에서 실측한 값 (임의로 바꾸지 말 것)
+## 5. 워드 서식 — 원본 .doc에서 실측한 값 (임의로 바꾸지 말 것)
 
 원본 양식(`공적조서 양식(26년 상반기)….doc`)을 Word COM으로 열어 실측한 값이다.
 생성 결과를 다시 Word로 열어 **아래 항목이 모두 일치함을 확인**했다(2026-07-29).
@@ -80,7 +102,7 @@ Word 표는 **모든 행이 하나의 공통 `tblGrid`를 `gridSpan`으로 나�
 
 ---
 
-## 5. AI 초안 (`api/ai-merit-draft.js`)
+## 6. AI 초안 (`api/ai-merit-draft.js`)
 
 - 저장소를 조회하지 않는다 — 근거 자료를 사용자가 직접 입력하는 구조라 `SUPABASE_*`가 필요 없다.
 - 호출 방식은 `api/ai-weekly-draft.js`와 **완전히 동일**: 서강대 API Gateway 우선 → 실패 시 Anthropic
@@ -88,12 +110,16 @@ Word 표는 **모든 행이 하나의 공통 `tblGrid`를 `gridSpan`으로 나�
 - 응답은 `===실적요약===` / `===활동===` / `===핵심가치===` 마커로 나눠 파싱한다 —
   프롬프트에서 이 마커 문구를 바꾸면 파싱이 깨지니 같이 맞출 것.
 - 마커가 하나도 안 잡히면 전체를 1번 섹션에 넣어 사용자가 직접 나눌 수 있게 한다(실패로 만들지 않음).
+- **기존 작성분 참고**: 편집 화면의 "기존 공적조서 문체 참고" 체크가 켜져 있으면, 최근 작성된 다른
+  공적조서 최대 2건의 본문을 `samples`로 함께 보낸다(각 섹션 700~900자로 잘라 보냄). 프롬프트에서
+  "문체·상세 수준만 참고하고 예시의 성과·수치·사업명을 가져다 쓰지 말 것"을 명시했다 — 이 문구를
+  빼면 다른 사람 실적이 섞여 들어갈 수 있으니 반드시 유지할 것.
 - **필요 환경변수**: `ANTHROPIC_API_KEY`(필수), `CLAUDE_MODEL`(선택, 기본 `claude-sonnet-4-6`),
   `SOGANG_GATEWAY_KEY`(선택 — 있으면 게이트웨이 우선). 주간보고와 같은 값을 공유한다.
 
 ---
 
-## 6. 검증 방법 (다음에 고칠 때도 이렇게 확인할 것)
+## 7. 검증 방법 (다음에 고칠 때도 이렇게 확인할 것)
 
 1. 로컬 모의 서버로 화면·저장·삭제·AI 초안 라운드트립 확인
 2. `scratchpad/gen_merit_docx.mjs` 패턴으로 브라우저 없이 .docx를 파일로 생성

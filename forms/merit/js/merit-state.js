@@ -1,22 +1,38 @@
 // 공적조서 상태 · 저장.
 //
 // 저장 설계(docs/HUB-CODEMAP.md §5 "엔티티 1건 = 저장 키 1개" 원칙):
-//   ktis_v11__merit_index          → 목록(메타데이터만: id/성명/직급/소속/수정일)
+//   ktis_v11__merit_index          → 공적조서 목록(메타데이터만: 본문 제외)
 //   ktis_v11__merit__rec__{id}     → 공적조서 1건의 전체 내용
+//   ktis_v11__merit_award__{id}    → 표창 수상자 1명 (항목이 작아 apiList 한 번으로 전부 읽는다)
+//   ktis_v11__merit_centers        → 이 양식이 쓰는 센터 목록(최초 1회 주간보고에서 씨앗을 받아옴)
 // 목록에 본문까지 넣으면 건수가 늘수록 페이로드가 커져 회사망 차단에 걸린다 — 절대 합치지 말 것.
 const MK = 'ktis_v11__merit';
 function meritIndexKey(){ return `${MK}_index`; }
 function meritRecKey(id){ return `${MK}__rec__${id}`; }
-// 주간보고 양식이 관리하는 팀원 명단을 "읽기 전용"으로 빌려온다(확인자/대상자 이름 자동 채움용).
-// 이 양식에서는 절대 이 키에 쓰지 않는다 — 팀원 명단의 주인은 forms/weekly다.
+const AWARD_PREFIX = `${MK}_award__`;
+function awardKey(id){ return `${AWARD_PREFIX}${id}`; }
+const MERIT_CENTERS_KEY = `${MK}_centers`;
+// 주간보고 양식이 관리하는 팀원/센터 명단을 "읽기 전용"으로 참조한다.
+// 이 양식에서는 절대 이 키들에 쓰지 않는다 — 주인은 forms/weekly다.
+// (센터를 여기서 직접 고치면 주간보고 응대율 표에 행이 생겨버리므로, 이 양식은 자기 센터
+//  목록을 따로 두고 주간보고 것은 "가져오기"로만 합친다.)
 const WEEKLY_MEMBERS_KEY = 'ktis_v11__weekly_members';
+const WEEKLY_CENTERS_KEY = 'ktis_v11__weekly_centers';
 
 const CORE_VALUE_TEXT = '고객을 가장 먼저 생각하고, 동료를 존중하며, 맡은 일은 끝까지 책임지는 자세, 권한 위임과 자발적 역량 강화를 통한 전문성 기반 과감한 실행으로 성과를 창출';
+const POSITIONS = ['부장','차장','과장','대리','사원'];
 
 let state = {
-  index: [],        // [{id, name, rank, affiliation, updatedAt}]
-  members: [],      // 주간보고에서 빌려온 팀원 명단(읽기 전용)
-  current: null,    // 지금 편집 중인 공적조서 1건(record)
+  tab: 'docs',      // docs | awards | centers
+  index: [],        // 공적조서 목록 [{id,name,rank,affiliation,centerName,awarded,updatedAt}]
+  awards: [],       // 수상자 명단 [{id,year,name,position,centerId,centerName,ownerName,meritId,note}]
+  centers: [],      // 이 양식의 센터 목록 [{id,name}]
+  members: [],      // 주간보고 팀원 명단(읽기 전용)
+  current: null,    // 편집 중인 공적조서
+  q: '',            // 목록 검색어
+  filterCenter: '', // 목록 센터 필터
+  filterAwarded: '',// '' | 'y' | 'n'
+  awardQ: '', awardYear: '', awardCenter: '',
   loading: true,
 };
 
@@ -25,51 +41,89 @@ function defaultRecord(){
   const half = now.getMonth() < 6 ? '1월~6월' : '7월~12월';
   return {
     id: 'mr' + Date.now(),
-    // 상단 인적사항
-    empNo: '', rank: '', name: '', affiliation: '',
+    empNo: '', rank: '', name: '', affiliation: '', centerId: '',
     meritField: "우수직원('혁신', '성장', '화합' 中 선정 기준에 해당하는 공적을 택1 기재)",
     period: `${now.getFullYear()}. ${half}까지`,
-    // 입력(초안 생성 근거)
-    direction: '',
-    rawFacts: '',
-    // 3개 섹션 본문
+    ownerName: '',
+    direction: '', rawFacts: '',
     s1: '', s2: '', s3: '',
-    // 확인자
     confirmAffiliation: 'AICC사업5팀', confirmRank: '차장', confirmName: '강성호',
+    awarded: false, awardYear: String(now.getFullYear()),
     updatedAt: new Date().toISOString(),
   };
 }
 
 // 목록처럼 "여러 명이 각자 다른 항목을 추가/삭제하는" 배열은 저장 직전에 서버 최신값을 다시 읽어
-// 그 위에 내 변경 하나만 얹는다. 브라우저를 오래 켜둔 사람이 옛 스냅샷을 통째로 덮어써서 남의
-// 항목을 지우는 사고를 막기 위함(forms/weekly에서 실제로 발생했던 문제와 동일한 대비).
-async function mutateIndex(mutateFn){
+// 그 위에 내 변경 하나만 얹는다(오래 켜둔 브라우저가 남의 항목을 지우는 사고 방지).
+async function mutateShared(key, localFallback, mutateFn){
   let fresh;
-  try{ const v = await apiGet(meritIndexKey()); fresh = Array.isArray(v) ? v : null; }catch(e){ fresh = null; }
-  if(!fresh) fresh = JSON.parse(JSON.stringify(state.index || []));
+  try{ const v = await apiGet(key); fresh = Array.isArray(v) ? v : null; }catch(e){ fresh = null; }
+  if(!fresh) fresh = JSON.parse(JSON.stringify(localFallback || []));
   const result = mutateFn(fresh) || fresh;
-  await apiSet(meritIndexKey(), result);
-  state.index = result;
+  await apiSet(key, result);
   return result;
+}
+const mutateIndex   = fn => mutateShared(meritIndexKey(), state.index,   arr=>fn(arr)).then(r=>(state.index=r));
+const mutateCenters = fn => mutateShared(MERIT_CENTERS_KEY, state.centers, arr=>fn(arr)).then(r=>(state.centers=r));
+
+function centerNameById(id){
+  const c = (state.centers||[]).find(x=>x.id===id);
+  return c ? c.name : '';
 }
 
 async function loadMeritState(){
   state.loading = true;
   try{
-    const [idx, members] = await Promise.all([
+    const [idx, members, weeklyCenters, myCenters, awardRows] = await Promise.all([
       apiGet(meritIndexKey()),
       apiGet(WEEKLY_MEMBERS_KEY),
+      apiGet(WEEKLY_CENTERS_KEY),
+      apiGet(MERIT_CENTERS_KEY),
+      apiList(AWARD_PREFIX),
     ]);
-    state.index = Array.isArray(idx) ? idx : [];
+    state.index   = Array.isArray(idx) ? idx : [];
     state.members = Array.isArray(members) ? members.filter(m=>m && !m.hidden) : [];
+    state._weeklyCenters = Array.isArray(weeklyCenters) ? weeklyCenters.filter(c=>c && !c.hidden) : [];
+
+    // 센터 목록: 처음 들어왔을 때만 주간보고 센터로 씨앗을 심는다. 이후에는 이 양식이 독립 관리.
+    if(Array.isArray(myCenters) && myCenters.length){
+      state.centers = myCenters;
+    }else if(state._weeklyCenters.length){
+      state.centers = state._weeklyCenters.map(c=>({id:c.id, name:c.name}));
+      try{ await apiSet(MERIT_CENTERS_KEY, state.centers); }catch(e){}
+    }else{
+      state.centers = [];
+    }
+
+    state.awards = (awardRows||[]).map(r=>{
+      try{ return JSON.parse(r.value); }catch(e){ return null; }
+    }).filter(Boolean);
   }catch(e){
     flash('서버 데이터를 불러오지 못했습니다. 네트워크를 확인해 주세요');
-    state.index = []; state.members = [];
+    state.index = []; state.members = []; state.centers = []; state.awards = [];
   }
   state.loading = false;
   renderApp();
 }
 
+/** 주간보고에 새로 생긴 센터를 이 양식 목록에 합친다(기존 항목은 건드리지 않음). */
+async function syncCentersFromWeekly(){
+  const weekly = state._weeklyCenters || [];
+  if(!weekly.length){ flash('주간보고에서 가져올 센터가 없습니다'); return; }
+  let added = 0;
+  try{
+    await mutateCenters(arr=>{
+      weekly.forEach(w=>{
+        if(!arr.some(c=>c.id===w.id || c.name===w.name)){ arr.push({id:w.id, name:w.name}); added++; }
+      });
+      return arr;
+    });
+    flash(added ? `주간보고 센터 ${added}개를 추가했습니다` : '새로 추가할 센터가 없습니다');
+    renderApp();
+  }catch(e){ flash('저장 실패: 네트워크를 확인해 주세요'); }
+}
+
+// ── 공적조서 ────────────────────────────────────────────────
 async function openRecord(id){
   try{
     const rec = await apiGet(meritRecKey(id));
@@ -78,10 +132,25 @@ async function openRecord(id){
     renderApp();
   }catch(e){ flash('불러오기 실패: 네트워크를 확인해 주세요'); }
 }
+function newRecord(){ state.current = defaultRecord(); renderApp(); }
 
-function newRecord(){
-  state.current = defaultRecord();
-  renderApp();
+/** 기존 공적조서 내용을 그대로 가져와 "대상자만 다른" 새 건을 만든다. */
+async function duplicateRecord(id){
+  try{
+    const src = await apiGet(meritRecKey(id));
+    if(!src){ flash('원본을 찾을 수 없습니다'); return; }
+    const rec = Object.assign(defaultRecord(), {
+      // 본문·방향성·메모는 그대로 가져오고, 대상자 인적사항만 비운다
+      direction: src.direction||'', rawFacts: src.rawFacts||'',
+      s1: src.s1||'', s2: src.s2||'', s3: src.s3||'',
+      meritField: src.meritField||'', period: src.period||'',
+      confirmAffiliation: src.confirmAffiliation||'', confirmRank: src.confirmRank||'',
+      confirmName: src.confirmName||'',
+    });
+    state.current = rec;
+    flash('내용을 복제했습니다 — 대상자 정보를 새로 입력하세요');
+    renderApp();
+  }catch(e){ flash('복제 실패: 네트워크를 확인해 주세요'); }
 }
 
 async function saveCurrent(){
@@ -93,8 +162,10 @@ async function saveCurrent(){
     await apiSet(meritRecKey(rec.id), rec);
     await mutateIndex(arr=>{
       const entry = {
-        id: rec.id, name: rec.name, rank: rec.rank,
-        affiliation: rec.affiliation, updatedAt: rec.updatedAt,
+        id: rec.id, name: rec.name, rank: rec.rank, affiliation: rec.affiliation,
+        centerId: rec.centerId, centerName: centerNameById(rec.centerId),
+        ownerName: rec.ownerName, awarded: !!rec.awarded, awardYear: rec.awardYear,
+        updatedAt: rec.updatedAt,
       };
       const i = arr.findIndex(x=>x && x.id===rec.id);
       if(i>=0) arr[i] = entry; else arr.unshift(entry);
@@ -102,9 +173,7 @@ async function saveCurrent(){
     });
     flash('저장되었습니다');
     renderApp();
-  }catch(e){
-    flash('저장 실패: 네트워크를 확인해 주세요');
-  }
+  }catch(e){ flash('저장 실패: 네트워크를 확인해 주세요'); }
 }
 
 async function deleteRecord(id){
@@ -114,6 +183,43 @@ async function deleteRecord(id){
     await mutateIndex(arr=> arr.filter(x=> x && x.id!==id));
     await apiDelete(meritRecKey(id));
     if(state.current && state.current.id===id) state.current = null;
+    flash('삭제되었습니다');
+    renderApp();
+  }catch(e){ flash('삭제 실패: 네트워크를 확인해 주세요'); }
+}
+
+/** 목록에서 바로 "표창 수상" 체크를 토글한다(본문은 건드리지 않음). */
+async function toggleAwarded(id, checked){
+  try{
+    const rec = await apiGet(meritRecKey(id));
+    if(rec){ rec.awarded = !!checked; await apiSet(meritRecKey(id), rec); }
+    await mutateIndex(arr=>{
+      const e = arr.find(x=>x && x.id===id);
+      if(e) e.awarded = !!checked;
+      return arr;
+    });
+    if(state.current && state.current.id===id) state.current.awarded = !!checked;
+    flash(checked ? '표창 수상으로 표시했습니다' : '표창 수상 표시를 해제했습니다');
+    renderApp();
+  }catch(e){ flash('저장 실패: 네트워크를 확인해 주세요'); }
+}
+
+// ── 표창 수상자 명단 ────────────────────────────────────────
+async function saveAward(entry){
+  try{
+    await apiSet(awardKey(entry.id), entry);
+    const i = state.awards.findIndex(a=>a.id===entry.id);
+    if(i>=0) state.awards[i] = entry; else state.awards.unshift(entry);
+    flash('수상자 명단에 저장했습니다');
+    renderApp();
+  }catch(e){ flash('저장 실패: 네트워크를 확인해 주세요'); }
+}
+async function deleteAward(id){
+  const a = state.awards.find(x=>x.id===id);
+  if(!confirm(`${a&&a.name?`「${a.name}」 `:''}수상자 항목을 삭제할까요?`)) return;
+  try{
+    await apiDelete(awardKey(id));
+    state.awards = state.awards.filter(x=>x.id!==id);
     flash('삭제되었습니다');
     renderApp();
   }catch(e){ flash('삭제 실패: 네트워크를 확인해 주세요'); }

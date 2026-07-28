@@ -1,16 +1,62 @@
 /* 공적조서 전용 스타일. 버튼/카드/배지/잠금화면 등 공통 모양은 shared/base.css에 있다. */
-  .wrap{max-width:900px;margin:0 auto;padding:18px 14px 80px;}
+  .wrap{max-width:960px;margin:0 auto;padding:18px 14px 80px;}
   .topbar{display:flex;justify-content:space-between;align-items:center;padding:0 2px 12px;margin-bottom:12px;border-bottom:2px solid #333;}
   .topbar-left{display:flex;align-items:center;gap:10px;}
   .topbar b{font-size:14px;} .topbar span{font-size:12px;color:#555;}
   h1{font-size:18px;margin:0 0 4px;}
-  h2{font-size:15px;margin:0 0 8px;}
+  h2{font-size:15px;margin:0;}
   h3{font-size:14px;margin:0 0 8px;}
+  h4{font-size:13px;margin:0 0 8px;}
   .sub{color:#555;font-size:12.5px;margin:0 0 14px;line-height:1.5;}
   .hint{color:#666;font-size:11.5px;line-height:1.6;margin:0 0 10px;}
   .hint.core-values{background:#f5f8ff;border:1px solid #dbe5f7;border-radius:6px;padding:8px 10px;color:#456;}
-  .empty{padding:28px;text-align:center;color:#888;font-size:13px;background:#fafafa;border:1px dashed #ccc;border-radius:8px;}
+  .empty{padding:24px;text-align:center;color:#888;font-size:12.5px;background:#fafafa;border:1px dashed #ccc;border-radius:8px;}
+  .grow{flex:1;}
 
+  /* 탭 */
+  .mtabs{display:flex;gap:6px;margin-bottom:14px;border-bottom:1px solid #ccc;padding-bottom:9px;flex-wrap:wrap;}
+  .mtab{border:1px solid #ccc;background:#fff;color:#555;border-radius:6px;padding:7px 13px;
+    font-size:12.5px;cursor:pointer;font-family:inherit;}
+  .mtab:hover{border-color:#8ab;color:#2a4a7a;}
+  .mtab.active{background:#2f6fed;border-color:#2f6fed;color:#fff;font-weight:700;}
+
+  /* 목록 헤더 · 필터 */
+  .mr-list-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;}
+  .mr-list-head .cnt{font-size:11.5px;font-weight:500;color:#888;margin-left:4px;}
+  .mr-filters{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;}
+  .mr-filters input, .mr-filters select{border:1px solid #ccc;border-radius:5px;padding:6px 8px;
+    font-size:12px;font-family:inherit;background:#fff;}
+  .mr-search{flex:1;min-width:170px;}
+
+  /* 목록 행 — 한 줄로 컴팩트하게 */
+  .mr-row{display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid #e2e2e2;
+    border-radius:6px;margin-bottom:5px;background:#fff;}
+  .mr-row:hover{border-color:#8ab;background:#fafcff;}
+  .mr-row.compact{padding:5px 8px;}
+  .mr-chk{display:flex;align-items:center;flex-shrink:0;}
+  .mr-chk input{margin:0;cursor:pointer;width:15px;height:15px;}
+  .mr-row-main{flex:1;min-width:0;cursor:pointer;}
+  .mr-row-t{font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .mr-rk{font-size:11px;font-weight:500;color:#777;margin-left:4px;}
+  .mr-row-m{font-size:11px;color:#888;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .mr-row-act{display:flex;gap:4px;flex-shrink:0;}
+  .mr-badge{display:inline-block;font-size:9.5px;font-weight:700;border-radius:3px;padding:1px 5px;
+    vertical-align:middle;margin-left:4px;}
+  .mr-badge.award{background:#fff4d6;color:#8a6100;border:1px solid #e8cf8a;}
+  .btn-mini{border:1px solid #ddd;background:#fff;color:#666;border-radius:4px;padding:3px 8px;
+    font-size:10.5px;cursor:pointer;font-family:inherit;white-space:nowrap;}
+  .btn-mini:hover{border-color:#8ab;color:#2a4a7a;background:#f4f8ff;}
+  .btn-mini.danger:hover{border-color:#d88;color:#a33;background:#fff5f5;}
+  .mr-center-name{flex:1;min-width:0;border:1px solid #ddd;border-radius:5px;padding:6px 8px;
+    font-size:12.5px;font-family:inherit;}
+
+  /* 편집 상단 고정 바 — 작성 중에도 언제든 목록으로 */
+  .mr-editbar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px;
+    background:#fff;border:1px solid #ccc;border-radius:8px;padding:8px 10px;margin-bottom:12px;
+    box-shadow:0 2px 8px rgba(0,0,0,.06);}
+  .mr-editbar-who{font-size:12.5px;font-weight:700;color:#333;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+  /* 입력 */
   .field-label{font-size:11.5px;color:#555;font-weight:700;margin:12px 0 5px;}
   .field-label small{font-weight:500;color:#888;}
   textarea.input-area{width:100%;min-height:150px;border:1px solid #ccc;border-radius:6px;
@@ -19,7 +65,6 @@
   textarea.input-area.lg{min-height:230px;}
   textarea.input-area:focus{outline:none;border-color:#2f6fed;box-shadow:0 0 0 2px rgba(47,111,237,.12);}
 
-  /* 인적사항 입력 그리드 */
   .mr-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
   .mr-grid .fld.wide{grid-column:1 / -1;}
   .fld{display:flex;flex-direction:column;gap:4px;}
@@ -29,23 +74,26 @@
   .fld input:focus, .fld select:focus{outline:none;border-color:#2f6fed;}
   .fld-row{display:flex;gap:6px;}
   .fld-row input{flex:1;min-width:0;}
-  .mr-pick{max-width:110px;flex-shrink:0;border:1px solid #ccc;border-radius:5px;padding:7px 4px;font-size:11.5px;font-family:inherit;background:#fff;}
-
-  .mr-editor-top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;}
+  .mr-pick{max-width:104px;flex-shrink:0;border:1px solid #ccc;border-radius:5px;padding:7px 4px;font-size:11.5px;font-family:inherit;background:#fff;}
+  .mr-inline-chk{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:#555;cursor:pointer;
+    padding:7px 0;user-select:none;}
+  .mr-inline-chk input{margin:0;cursor:pointer;}
+  .ref-chk{margin-top:4px;}
+  .awarded-fld .mr-inline-chk{border:1px solid #e8cf8a;background:#fffdf5;border-radius:5px;padding:6px 9px;}
   .mr-input-card{background:#f7faff;border:1px solid #b8d4ea;}
 
-  /* 목록 */
-  .mr-item{display:flex;justify-content:space-between;align-items:center;gap:10px;
-    padding:12px;border:1px solid #ddd;border-radius:6px;margin-bottom:8px;background:#fafafa;}
-  .mr-item-main{flex:1;min-width:0;cursor:pointer;}
-  .mr-item .t{font-size:13.5px;font-weight:700;}
-  .mr-item .t .rk{font-size:11.5px;font-weight:500;color:#666;margin-left:4px;}
-  .mr-item .m{font-size:11.5px;color:#666;margin-top:3px;}
-  .mr-item-actions{display:flex;gap:6px;flex-shrink:0;}
-
-  .add-row-btn{width:100%;border:1px dashed #999;background:#fafafa;color:#444;padding:10px;
-    border-radius:6px;font-size:12.5px;cursor:pointer;margin:4px 0 14px;font-family:inherit;}
-  .add-row-btn:hover{border-color:#2f6fed;color:#2f6fed;}
+  /* 수상자 명단 표 */
+  .mr-table-wrap{overflow-x:auto;}
+  table.mr-table{width:100%;border-collapse:collapse;font-size:12px;}
+  table.mr-table th,table.mr-table td{border:1px solid #ddd;padding:6px 8px;text-align:left;vertical-align:middle;}
+  table.mr-table th{background:#f2f5f9;font-weight:700;color:#456;white-space:nowrap;font-size:11.5px;}
+  table.mr-table td.nm{font-weight:700;}
+  table.mr-table td.note{color:#777;font-size:11px;}
+  table.mr-table td.act{white-space:nowrap;}
+  table.mr-table td.empty-cell{text-align:center;color:#999;padding:22px;}
+  .mr-subform{margin-top:14px;padding:12px;border:1px solid #b8d4ea;border-radius:8px;background:#f7faff;}
+  .mr-add-center{display:flex;gap:6px;margin-top:10px;}
+  .mr-add-center input{flex:1;border:1px solid #ccc;border-radius:5px;padding:7px 9px;font-size:12.5px;font-family:inherit;}
 
   .form-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
 
@@ -54,9 +102,10 @@
     .card{padding:12px 10px;}
     .mr-grid{grid-template-columns:1fr;}
     /* iOS는 입력창 font-size가 16px 미만이면 포커스 시 자동 확대됨 — 확대 방지 */
-    textarea.input-area, .fld input, .fld select, .mr-pick, .lock-input{font-size:16px;}
+    textarea.input-area, .fld input, .fld select, .mr-pick, .lock-input,
+    .mr-filters input, .mr-filters select, .mr-add-center input, .mr-center-name{font-size:16px;}
     .form-actions{flex-direction:column;}
     .form-actions .btn{width:100%;}
-    .mr-item{flex-direction:column;align-items:stretch;}
-    .mr-item-actions .btn{flex:1;}
+    .mr-search{min-width:100%;}
+    .mr-row-act{flex-direction:column;}
   }
