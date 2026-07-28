@@ -49,8 +49,22 @@ function defaultRecord(){
     s1: '', s2: '', s3: '',
     confirmAffiliation: 'AICC사업5팀', confirmRank: '차장', confirmName: '강성호',
     awarded: false, awardYear: String(now.getFullYear()),
+    // AI가 만들어 준 원본 초안 스냅샷. 사람이 고친 최종본과 비교해 "우리 팀이 실제로 쓰는 톤"을
+    // 다음 초안 생성 때 참고 자료로 쓴다(제안3 피드백 루프).
+    aiDraft: null,
     updatedAt: new Date().toISOString(),
   };
+}
+
+/** AI 초안과 사람이 고친 최종본이 의미 있게 다른가 — 다르면 문체 학습 자료가 된다. */
+function isMeaningfulCorrection(rec){
+  const d = rec && rec.aiDraft;
+  if(!d) return false;
+  const norm = s => String(s||'').replace(/\s+/g,' ').trim();
+  return ['s1','s2','s3'].some(k=>{
+    const before = norm(d[k]), after = norm(rec[k]);
+    return before && after && after.length > 30 && after !== before;
+  });
 }
 
 // 목록처럼 "여러 명이 각자 다른 항목을 추가/삭제하는" 배열은 저장 직전에 서버 최신값을 다시 읽어
@@ -158,6 +172,7 @@ async function saveCurrent(){
   if(!rec) return;
   collectFormIntoRecord();
   rec.updatedAt = new Date().toISOString();
+  rec.hasCorrection = isMeaningfulCorrection(rec);
   try{
     await apiSet(meritRecKey(rec.id), rec);
     await mutateIndex(arr=>{
@@ -165,6 +180,8 @@ async function saveCurrent(){
         id: rec.id, name: rec.name, rank: rec.rank, affiliation: rec.affiliation,
         centerId: rec.centerId, centerName: centerNameById(rec.centerId),
         ownerName: rec.ownerName, awarded: !!rec.awarded, awardYear: rec.awardYear,
+        // 본문은 넣지 않고 "고친 이력이 있다"는 표시만 — 초안 생성 때 어떤 건을 불러올지 고르는 용도
+        hasCorrection: !!rec.hasCorrection,
         updatedAt: rec.updatedAt,
       };
       const i = arr.findIndex(x=>x && x.id===rec.id);

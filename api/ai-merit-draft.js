@@ -83,7 +83,7 @@ export default async function handler(req, res) {
   if (!ANTHROPIC_API_KEY) return res.status(500).json({ error: 'Server missing ANTHROPIC_API_KEY' });
 
   try {
-    const { direction, rawFacts, name, rank, affiliation, meritField, period, samples } = req.body || {};
+    const { direction, rawFacts, name, rank, affiliation, meritField, period, samples, corrections } = req.body || {};
     if (!rawFacts || !String(rawFacts).trim()) {
       return res.status(400).json({ error: '실적 내용을 먼저 입력해 주세요' });
     }
@@ -97,6 +97,21 @@ ${String(s.s1 || '').slice(0, 700)}
 ${String(s.s2 || '').slice(0, 900)}
 3. 핵심가치 실천/기타사항
 ${String(s.s3 || '').slice(0, 700)}`).join('\n\n')
+      : '';
+
+    // "AI가 쓴 초안(before) → 담당자가 실제로 고쳐 쓴 최종본(after)" 쌍.
+    // 담당자가 어느 방향으로 고치는지(과장 제거, 표현 완화, 구체화 등)를 학습시키는 자료다.
+    const correctionText = Array.isArray(corrections) && corrections.length
+      ? corrections.slice(0, 2).map((c, i) => {
+          const b = c.before || {}, a = c.after || {};
+          return `[수정 사례 ${i + 1}]
+< AI가 쓴 초안 >
+${String(b.s1 || '').slice(0, 400)}
+${String(b.s2 || '').slice(0, 600)}
+< 담당자가 고쳐 쓴 최종본 >
+${String(a.s1 || '').slice(0, 400)}
+${String(a.s2 || '').slice(0, 600)}`;
+        }).join('\n\n')
       : '';
 
     const systemPrompt = `당신은 KTIS AICC사업2단 사업5팀의 "본부장표창 공적조서" 작성을 돕는 보조입니다.
@@ -148,6 +163,10 @@ ${CORE_VALUES}
     }[실적 메모 (두서없이 작성된 원문)]\n${rawFacts}\n\n${
       sampleText
         ? `${sampleText}\n\n위 [참고 예시]는 우리 팀이 이전에 작성한 공적조서다. 문장 길이·개조식 어투·상세함의 수준만 참고하고, 예시에 있는 성과·수치·사업명을 이번 대상자의 것으로 가져다 쓰지 마라. 이번 초안은 반드시 위 [실적 메모]에 근거해야 한다.\n\n`
+        : ''
+    }${
+      correctionText
+        ? `${correctionText}\n\n위 [수정 사례]는 AI가 쓴 초안을 담당자가 실제로 어떻게 고쳐 썼는지 보여준다. 담당자가 무엇을 덜어내고 무엇을 더 구체적으로 바꾸는지(특히 과장된 수식어를 어떻게 눌러 쓰는지) 파악해서, 처음부터 그 최종본에 가까운 톤으로 작성하라. 사례의 내용 자체를 가져다 쓰지는 마라.\n\n`
         : ''
     }위 내용을 바탕으로 공적조서 3개 섹션 초안을 작성해줘.`;
 

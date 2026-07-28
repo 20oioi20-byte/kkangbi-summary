@@ -35,6 +35,8 @@ function renderApp(){
     state.tab==='centers' ? renderCenters() :
     (state.current ? renderEditor() : renderList())
   );
+  // 기존 건을 열었을 때도 중복 수상 경고가 바로 보이도록(입력 이벤트 없이도) 한 번 검사한다.
+  if(state.tab==='docs' && state.current) checkDupAward(state.current.name);
 }
 function renderTabs(){
   const t = (id, label)=> `<button class="mtab ${state.tab===id?'active':''}" onclick="switchMeritTab('${id}')">${label}</button>`;
@@ -130,14 +132,16 @@ function renderEditor(){
 
   <div class="card">
     <h3>대상자 정보</h3>
+    <div id="dupWarn"></div>
     <div class="mr-grid">
       <label class="fld"><span>사번</span><input id="f_empNo" value="${escapeHtml(r.empNo)}" placeholder="2390620"></label>
       <label class="fld"><span>직급(호칭)</span><input id="f_rank" value="${escapeHtml(r.rank)}" placeholder="팀장 / 센터장"></label>
       <label class="fld">
         <span>성명</span>
         <div class="fld-row">
-          <input id="f_name" value="${escapeHtml(r.name)}" placeholder="이름">
-          <select class="mr-pick" onchange="if(this.value){document.getElementById('f_name').value=this.value;} this.selectedIndex=0;">${memberOpts}</select>
+          <input id="f_name" value="${escapeHtml(r.name)}" placeholder="이름"
+            oninput="checkDupAward(this.value)">
+          <select class="mr-pick" onchange="if(this.value){document.getElementById('f_name').value=this.value; checkDupAward(this.value);} this.selectedIndex=0;">${memberOpts}</select>
         </div>
       </label>
       <label class="fld">
@@ -216,6 +220,25 @@ function backToList(){
   renderApp();
 }
 
+/** 표창은 형평성을 따지므로, 이미 수상 이력이 있는 사람이면 작성 단계에서 바로 알려준다.
+ *  (수상자 명단을 사람이 눈으로 뒤지지 않아도 되게 — 제안1) */
+function checkDupAward(name){
+  const el = document.getElementById('dupWarn');
+  if(!el) return;
+  const t = String(name||'').trim();
+  if(!t){ el.innerHTML = ''; return; }
+  const hits = (state.awards||[]).filter(a => String(a.name||'').trim() === t);
+  if(!hits.length){ el.innerHTML = ''; return; }
+  const detail = hits
+    .sort((a,b)=> String(b.year||'').localeCompare(String(a.year||'')))
+    .map(h => `${escapeHtml(h.year||'?')}년${h.centerName?' · '+escapeHtml(h.centerName):''}${h.position?' · '+escapeHtml(h.position):''}`)
+    .join(' / ');
+  el.innerHTML = `<div class="dup-warn">
+    ⚠️ <b>${escapeHtml(t)}</b> 님은 이미 표창 수상 이력이 있습니다 — ${detail}
+    <button class="btn-mini" onclick="switchMeritTab('awards')">명단 보기</button>
+  </div>`;
+}
+
 // ── 표창 수상자 명단 ────────────────────────────────────────
 function renderAwards(){
   const q = (state.awardQ||'').trim().toLowerCase();
@@ -262,6 +285,7 @@ function renderAwards(){
         <option value="">전체 센터</option>${centerOpts}
       </select>
     </div>
+    ${renderAwardSummary(rows)}
     <div class="mr-table-wrap">
       <table class="mr-table">
         <thead><tr><th>연도</th><th>성명</th><th>직책</th><th>센터</th><th>담당자</th><th>비고</th><th>관리</th></tr></thead>
@@ -269,6 +293,37 @@ function renderAwards(){
       </table>
     </div>
     <div id="awardForm"></div>
+  </div>`;
+}
+
+/** 센터별·담당자별 수상 집계 + "아직 수상자가 없는 센터" — 반기마다 대상자를 고를 때
+ *  배분이 한쪽으로 쏠렸는지 한눈에 보기 위한 요약(제안2). 현재 필터가 적용된 목록 기준. */
+function renderAwardSummary(rows){
+  if(!rows.length) return '';
+  const tally = (key)=>{
+    const m = new Map();
+    rows.forEach(r=>{ const k=(r[key]||'').trim(); if(k) m.set(k,(m.get(k)||0)+1); });
+    return [...m.entries()].sort((a,b)=> b[1]-a[1] || a[0].localeCompare(b[0],'ko'));
+  };
+  const byCenter = tally('centerName');
+  const byOwner  = tally('ownerName');
+  const chips = (arr, max)=> arr.slice(0,max)
+    .map(([k,v])=>`<span class="sum-chip">${escapeHtml(k)} <b>${v}</b></span>`).join('')
+    + (arr.length>max ? `<span class="sum-more">외 ${arr.length-max}곳</span>` : '');
+
+  // 이 목록에 한 번도 등장하지 않은 센터 = 배분에서 빠지고 있는 곳
+  const awarded = new Set(rows.map(r=>(r.centerName||'').trim()).filter(Boolean));
+  const missing = (state.centers||[]).map(c=>c.name).filter(n=>!awarded.has(n));
+
+  return `
+  <div class="mr-summary">
+    <div class="sum-row"><span class="sum-label">총 수상</span><b class="sum-total">${rows.length}명</b></div>
+    <div class="sum-row"><span class="sum-label">센터별</span><span class="sum-chips">${chips(byCenter,5)}</span></div>
+    <div class="sum-row"><span class="sum-label">담당자별</span><span class="sum-chips">${chips(byOwner,5)}</span></div>
+    ${missing.length ? `<div class="sum-row missing">
+      <span class="sum-label">수상자 없는 센터</span>
+      <span class="sum-chips">${missing.slice(0,8).map(n=>`<span class="sum-chip none">${escapeHtml(n)}</span>`).join('')}${missing.length>8?`<span class="sum-more">외 ${missing.length-8}곳</span>`:''}</span>
+    </div>` : ''}
   </div>`;
 }
 function editAward(id){
@@ -410,14 +465,23 @@ async function generateMeritDraft(){
   flash('AI 초안 생성 중… (10~30초 정도 걸립니다)');
   try{
     // 기존 공적조서 본문을 문체 참고용으로 최대 2건 함께 보낸다(자기 자신은 제외).
-    let samples = [];
+    // 여기에 더해, "AI 초안 → 담당자가 실제로 고친 최종본" 쌍이 있으면 그것도 보낸다 —
+    // 담당자가 어느 방향으로 고치는지(과장 제거 등)를 학습시키기 위함(제안3 피드백 루프).
+    let samples = [], corrections = [];
     if(useRef){
-      const ids = (state.index||[])
-        .filter(x=>x && x.id!==r.id)
-        .sort((a,b)=>String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')))
-        .slice(0,2).map(x=>x.id);
-      const recs = await Promise.all(ids.map(id=>apiGet(meritRecKey(id)).catch(()=>null)));
-      samples = recs.filter(x=>x && (x.s1||x.s2)).map(x=>({
+      const others = (state.index||[]).filter(x=>x && x.id!==r.id)
+        .sort((a,b)=>String(b.updatedAt||'').localeCompare(String(a.updatedAt||'')));
+      const corrIds = others.filter(x=>x.hasCorrection).slice(0,2).map(x=>x.id);
+      const sampIds = others.filter(x=>!corrIds.includes(x.id)).slice(0,2).map(x=>x.id);
+      const [corrRecs, sampRecs] = await Promise.all([
+        Promise.all(corrIds.map(id=>apiGet(meritRecKey(id)).catch(()=>null))),
+        Promise.all(sampIds.map(id=>apiGet(meritRecKey(id)).catch(()=>null))),
+      ]);
+      corrections = corrRecs.filter(x=>x && x.aiDraft).map(x=>({
+        before: { s1:String(x.aiDraft.s1||'').slice(0,400), s2:String(x.aiDraft.s2||'').slice(0,600) },
+        after:  { s1:String(x.s1||'').slice(0,400),         s2:String(x.s2||'').slice(0,600) },
+      })).filter(c => c.after.s1 || c.after.s2);
+      samples = sampRecs.filter(x=>x && (x.s1||x.s2)).map(x=>({
         s1:String(x.s1||'').slice(0,700), s2:String(x.s2||'').slice(0,900), s3:String(x.s3||'').slice(0,700)
       }));
     }
@@ -427,7 +491,7 @@ async function generateMeritDraft(){
         direction: r.direction, rawFacts: r.rawFacts,
         name: r.name, rank: r.rank,
         affiliation: r.affiliation || centerNameById(r.centerId),
-        meritField: r.meritField, period: r.period, samples,
+        meritField: r.meritField, period: r.period, samples, corrections,
       })
     });
     const data = await res.json();
@@ -435,7 +499,10 @@ async function generateMeritDraft(){
     r.s1 = data.s1 || r.s1;
     r.s2 = data.s2 || r.s2;
     r.s3 = data.s3 || r.s3;
-    flash('초안이 생성됐습니다 — 내용을 확인·수정하고 「저장」을 눌러주세요.');
+    // 생성 직후 원본을 스냅샷으로 남긴다 — 저장할 때 사람이 고친 최종본과 비교해
+    // 다음 초안 생성의 문체 학습 자료로 쓴다.
+    r.aiDraft = { s1: data.s1||'', s2: data.s2||'', s3: data.s3||'', at: new Date().toISOString() };
+    flash(`초안이 생성됐습니다${corrections.length?` (기존 수정이력 ${corrections.length}건 반영)`:''} — 확인·수정 후 「저장」을 눌러주세요.`);
     renderApp();
   }catch(e){
     console.error(e);
