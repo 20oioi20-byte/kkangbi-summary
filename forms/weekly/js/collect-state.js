@@ -195,9 +195,19 @@ function memberById(id){ return state.members.find(m=>m.id===id); }
 function centerById(id){ return state.centers.find(c=>c.id===id); }
 function visibleCenters(){ return state.centers.filter(c=>!c.hidden); }
 function memberReport(weekKey, memberId){ return (state.reports[weekKey]||{})[memberId] || null; }
-function hasPerf(r){ return !!(r && r.perf && r.perf.trim()); }
-function hasPlan(r){ return !!(r && r.plan && r.plan.trim()); }
+// 담당자가 "실적/계획 없음" 체크박스로 명시적으로 표시한 경우(r.perfNone/r.planNone) — 이건
+// "아직 안 씀"이 아니라 "확인했고 해당 없음"이므로 작성 완료로 취급한다(메인 현황 배지·취합 제외 판단에 사용).
+function hasPerf(r){ return !!(r && (r.perfNone || (r.perf && r.perf.trim()))); }
+function hasPlan(r){ return !!(r && (r.planNone || (r.plan && r.plan.trim()))); }
 function hasReport(r){ return hasPerf(r) || hasPlan(r); }
+// 체크박스 없이 그냥 "없음"/"없습니다"류 문구만 딱 그것만 적어놓은 경우도 취합 시 제외 대상으로
+// 인식한다 — 문장 중간에 "없음"이 들어간 진짜 내용(예: "이슈 없음 확인 후 종료")까지 지우지 않도록
+// 전체 텍스트가 정확히 이런 문구 하나뿐일 때만 매치한다.
+const NONE_TEXT_RE = /^(해당\s*없음|없음|없습니다|없다|특이사항\s*없음|해당사항\s*없음)\.?$/;
+function isNoneText(text){
+  if(!text) return false;
+  return NONE_TEXT_RE.test(String(text).trim());
+}
 function memberReportStatus(weekKey, memberId){
   const r = memberReport(weekKey, memberId);
   if(!hasReport(r)) return 'todo';

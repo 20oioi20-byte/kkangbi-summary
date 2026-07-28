@@ -80,8 +80,11 @@ function aggregateSection(kind){
 
   members.forEach(m=>{
     const r = memberReport(meta.weekKey, m.id);
+    const noneFlag = kind==='perf' ? (r&&r.perfNone) : (r&&r.planNone);
     const text = kind==='perf' ? (r&&r.perf) : (r&&r.plan);
-    if(!text || !text.trim()) return;
+    // "없음" 체크박스로 표시했거나, 체크 없이 "없음"/"없습니다" 한 마디만 적은 경우 —
+    // 둘 다 취합(메인 화면 담당자 내용 전체 취합)에서 제외한다.
+    if(noneFlag || !text || !text.trim() || isNoneText(text)) return;
 
     const parsed = parseContentToLines(text);
     const hasStruct = parsed.some(p=>p.type==='title');

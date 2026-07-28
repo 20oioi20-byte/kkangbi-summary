@@ -2,15 +2,40 @@ function flushMemberDraft(){
   if(state.activeTab && String(state.activeTab).startsWith('m')){
     const pe=document.getElementById('draft-perf');
     const pl=document.getElementById('draft-plan');
-    if(pe&&pl) draftBuffers[draftKey(currentMeta().weekKey, state.activeTab)]={perf:pe.value, plan:pl.value};
+    const pn=document.getElementById('draft-perf-none');
+    const ln=document.getElementById('draft-plan-none');
+    if(pe&&pl) draftBuffers[draftKey(currentMeta().weekKey, state.activeTab)]={
+      perf:pe.value, plan:pl.value,
+      perfNone: pn?pn.checked:false, planNone: ln?ln.checked:false
+    };
   }
+}
+// "실적/계획 없음" 체크박스 토글. 체크하는 순간엔 아직 입력란이 비활성화되기 전이라 실제로
+// 입력해둔 값이 남아있으므로 그 값을 draft에 담아 보존한다. 체크를 해제하면 입력란은 다시
+// 빈 채로 활성화된다(체크 전 내용을 그대로 되살리려 하지 않음 — 어차피 비활성화 상태에서는
+// 화면에 아무 값도 안 남아있어 되살릴 게 없고, 그런 걸 시도하면 오히려 더 헷갈린다).
+// 실제로 서버에 저장되는 건 saveMemberDraft를 눌렀을 때뿐이다(다른 입력란과 동일).
+function toggleNoneFlag(memberId, field, checked){
+  const meta = currentMeta();
+  const dk = draftKey(meta.weekKey, memberId);
+  const pe = document.getElementById('draft-perf');
+  const pl = document.getElementById('draft-plan');
+  const cur = draftBuffers[dk] || {perf:'', plan:'', perfNone:false, planNone:false};
+  if(pe) cur.perf = pe.value;
+  if(pl) cur.plan = pl.value;
+  cur[field+'None'] = checked;
+  draftBuffers[dk] = cur;
+  renderAll();
 }
 function renderMemberPanel(memberId){
   const m = memberById(memberId);
   if(!m) return `<div class="empty">담당자 없음</div>`;
   const meta = currentMeta();
   const saved = memberReport(meta.weekKey, memberId) || {perf:'', plan:''};
-  const draft = draftBuffers[draftKey(meta.weekKey, memberId)] || {perf:saved.perf||'', plan:saved.plan||''};
+  const draft = draftBuffers[draftKey(meta.weekKey, memberId)] || {
+    perf:saved.perf||'', plan:saved.plan||'',
+    perfNone: !!saved.perfNone, planNone: !!saved.planNone
+  };
 
   // 히스토리 월
   let hy, hm;
@@ -40,8 +65,8 @@ function renderMemberPanel(memberId){
         </div>
       </div>
       <div class="hist-acc-body ${open?'open':''}">
-        <div class="block"><b>실적</b><pre>${escapeHtml(r.perf||'(없음)')}</pre></div>
-        <div class="block"><b>계획</b><pre>${escapeHtml(r.plan||'(없음)')}</pre></div>
+        <div class="block"><b>실적</b><pre>${r.perfNone?'(해당 없음으로 처리됨)':escapeHtml(r.perf||'(미작성)')}</pre></div>
+        <div class="block"><b>계획</b><pre>${r.planNone?'(해당 없음으로 처리됨)':escapeHtml(r.plan||'(미작성)')}</pre></div>
         <button class="btn btn-outline btn-sm" onclick="event.stopPropagation(); loadHistToDraft('${memberId}','${k}')">이 내용을 현재 입력란에 불러오기</button>
       </div>
     </div>`;
@@ -59,11 +84,15 @@ function renderMemberPanel(memberId){
     </p>
     <div class="field-label-row">
       <div class="field-label">실적 (${meta.perfRange})</div>
+      <label class="none-check"><input type="checkbox" id="draft-perf-none" ${draft.perfNone?'checked':''} onchange="toggleNoneFlag('${memberId}','perf',this.checked)"> 실적 없음</label>
       ${memberId==='m1' ? `<button type="button" class="btn btn-outline btn-sm ai-draft-btn" id="aiDraftBtn" onclick="generateAiDraft('${memberId}')">🤖 깡비서 초안</button>` : ''}
     </div>
-    <textarea class="input-area" id="draft-perf" placeholder="자유롭게 작성 (가/나/다, ○, ※ 형식이 있으면 취합 시 그대로 반영)">${escapeHtml(draft.perf)}</textarea>
-    <div class="field-label">계획 (${meta.planRange})</div>
-    <textarea class="input-area" id="draft-plan" placeholder="다음 주 계획">${escapeHtml(draft.plan)}</textarea>
+    <textarea class="input-area" id="draft-perf" ${draft.perfNone?'disabled':''} placeholder="자유롭게 작성 (가/나/다, ○, ※ 형식이 있으면 취합 시 그대로 반영)">${draft.perfNone?'':escapeHtml(draft.perf)}</textarea>
+    <div class="field-label-row">
+      <div class="field-label">계획 (${meta.planRange})</div>
+      <label class="none-check"><input type="checkbox" id="draft-plan-none" ${draft.planNone?'checked':''} onchange="toggleNoneFlag('${memberId}','plan',this.checked)"> 계획 없음</label>
+    </div>
+    <textarea class="input-area" id="draft-plan" ${draft.planNone?'disabled':''} placeholder="다음 주 계획">${draft.planNone?'':escapeHtml(draft.plan)}</textarea>
     <div class="form-actions">
       <button class="btn btn-primary" onclick="saveMemberDraft('${memberId}')">💾 이번 주차 저장</button>
       <button class="btn btn-outline" onclick="switchTab('main')">메인 현황</button>
@@ -104,7 +133,10 @@ function loadHistToDraft(memberId, weekKey){
   if(!r) return;
   // weekKey는 "불러오는 원본"(과거 주차)일 뿐, 실제로 채워 넣는 곳은 지금 보고 있는 주차다.
   const meta = currentMeta();
-  draftBuffers[draftKey(meta.weekKey, memberId)] = {perf:r.perf||'', plan:r.plan||''};
+  draftBuffers[draftKey(meta.weekKey, memberId)] = {
+    perf:r.perf||'', plan:r.plan||'',
+    perfNone: !!r.perfNone, planNone: !!r.planNone
+  };
   flash('히스토리 내용을 입력란에 불러왔습니다. 저장 버튼을 눌러 현재 주차에 반영하세요.');
   renderAll();
 }
@@ -133,7 +165,8 @@ async function generateAiDraft(memberId){
     });
     const data = await res.json();
     if(!res.ok || data.error) throw new Error(data.error || '생성 실패');
-    draftBuffers[draftKey(meta.weekKey, memberId)] = {perf:data.perf||'', plan:data.plan||''};
+    // AI가 실제 내용을 채워준 것이므로 "없음" 체크는 해제한다.
+    draftBuffers[draftKey(meta.weekKey, memberId)] = {perf:data.perf||'', plan:data.plan||'', perfNone:false, planNone:false};
     flash('깡비서 초안이 생성됐습니다 — 내용을 확인하고 「이번 주차 저장」을 눌러주세요.');
     renderAll();
   }catch(e){
@@ -143,13 +176,18 @@ async function generateAiDraft(memberId){
   }
 }
 function saveMemberDraft(memberId){
-  const perf = document.getElementById('draft-perf').value;
-  const plan = document.getElementById('draft-plan').value;
+  const perfNone = !!document.getElementById('draft-perf-none').checked;
+  const planNone = !!document.getElementById('draft-plan-none').checked;
+  // "없음"으로 체크된 칸은 텍스트가 disabled로 잠겨있어도, 실제 저장되는 내용은 항상 빈 값으로
+  // 강제한다 — 취합 시 aggregateSection이 "!text"만 보고도 바로 제외할 수 있게(이중 안전장치로
+  // r.perfNone/r.planNone 플래그도 같이 저장한다).
+  const perf = perfNone ? '' : document.getElementById('draft-perf').value;
+  const plan = planNone ? '' : document.getElementById('draft-plan').value;
   const meta = currentMeta();
-  const report = {perf, plan, savedAt:new Date().toISOString()};
+  const report = {perf, plan, perfNone, planNone, savedAt:new Date().toISOString()};
   if(!state.reports[meta.weekKey]) state.reports[meta.weekKey]={};
   state.reports[meta.weekKey][memberId] = report;
-  draftBuffers[draftKey(meta.weekKey, memberId)] = {perf, plan};
+  draftBuffers[draftKey(meta.weekKey, memberId)] = {perf, plan, perfNone, planNone};
   // 이 담당자 몫의 키에만 쓴다 — 다른 담당자 데이터는 건드리지 않음(동시 저장 시 서로 덮어쓰지 않도록)
   saveKV(reportKey(meta.weekKey, memberId), report);
   flash(`${memberById(memberId).name} · ${meta.fullLabel} 저장 완료`);

@@ -66,7 +66,7 @@ shared/kv-client.js → shared/auth.js → collect-dates.js → collect-state.js
 ### collect-docword-rules.js
 | 함수 | 역할 |
 |---|---|
-| `aggregateSection(kind)` | 담당자 원문 → 가/나/다 구조로 취합(규칙 기반, AI 미사용) |
+| `aggregateSection(kind)` | 담당자 원문 → 가/나/다 구조로 취합(규칙 기반, AI 미사용). `perfNone`/`planNone` 체크박스로 표시했거나, 체크 없이 텍스트가 정확히 "없음"/"없습니다"류 한 마디뿐인 경우(`isNoneText`, `collect-state.js`) 취합에서 제외한다(2026-07-28 추가) |
 | `tokenizeParens` | 괄호 위첨자 규칙(센터코드 괄호는 제외) |
 | `docLinesToHtml` / `domToDocLines` | 구조 ↔ 화면 표시 상호 변환 |
 
@@ -137,7 +137,7 @@ A가 자기 것만 고쳤는데 B의 내용까지 바뀌어 보이는 사고가 
 | 응대율 기본값 규칙(센터+기간+기본%) | `ktis_v11__weekly_ratedefaults` | `collect-rate-panel.js`의 `addRateDefault`/`deleteRateDefault`, `mutateSharedList` |
 | 자료보관함 목록(메타데이터만, base64 없음) | `ktis_v11__weekly_archive_index` | `collect-main-panel.js`/`collect-archive-panel.js`, `mutateSharedList` |
 | 자료보관함 실제 파일(base64, 항목별) | `ktis_v11__weekly_archive_item__{id}` | `collect-main-panel.js`의 `saveWordAndArchive` — 큰 값이라 `apiSet`이 필요하면 자동 청크 분할 |
-| 담당자별 실적/계획 (주차 단위) | `ktis_v11__weekly__rpt__{weekKey}__{memberId}` | `collect-member-panel.js`의 `saveMemberDraft` — **이 담당자 몫만** 저장 |
+| 담당자별 실적/계획 (주차 단위) | `ktis_v11__weekly__rpt__{weekKey}__{memberId}` | `collect-member-panel.js`의 `saveMemberDraft` — **이 담당자 몫만** 저장. 값 형태: `{perf, plan, perfNone, planNone, savedAt}` — `perfNone`/`planNone`은 "실적/계획 없음" 체크박스 상태(2026-07-28 추가). 체크된 쪽은 `perf`/`plan`을 항상 빈 문자열로 강제 저장한다. |
 | 취합본 (주차 단위) | `ktis_v11__weekly__agg__{weekKey}` | `collect-main-panel.js`의 `flushFinalEditNow`/`doAggregate` |
 | 응대율 (센터·월 단위) | `ktis_v11__weekly__rate__{monthKey}__{centerId}` | `collect-rate-panel.js`의 `onRateCellChange`/`saveRateMonth` — **이 센터 몫만** 저장 |
 | (이 양식 것 아님) 화면 잠금 비밀번호 | `ktis_v11__hub_pw` — 허브 전체 공용, `shared/auth.js` 참고 |
