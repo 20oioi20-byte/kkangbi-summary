@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>본부장표창 공적조서 · 사업5팀</title>
+<link rel="stylesheet" href="../../shared/base.css">
+<link rel="stylesheet" href="css/merit.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+
+<div class="lock-screen" id="lockScreen">
+  <div class="lock-box">
+    <div class="lock-title">깡비서 · 공적조서</div>
+    <div class="lock-sub">비밀번호를 입력하세요</div>
+    <input type="password" id="lockPwInput" class="lock-input" placeholder="비밀번호" autocomplete="off" inputmode="numeric">
+    <button type="button" class="btn btn-primary lock-btn" onclick="tryUnlock()">입장</button>
+    <div class="lock-err" id="lockErr"></div>
+  </div>
+</div>
+
+<div class="wrap">
+  <div class="topbar">
+    <div class="topbar-left">
+      <a href="../../" class="hub-home-link">🏠 허브 홈</a>
+      <b>깡비서 · 본부장표창 공적조서</b>
+    </div>
+    <span>사업5팀 · 팀 공유 저장</span>
+  </div>
+  <h1>본부장표창 공적조서</h1>
+  <p class="sub">실적을 편하게 적어두면 AI가 <b>실적 요약 / 실적 달성을 위한 활동 / 핵심가치 실천</b> 초안을 만들어 줍니다. 확인·수정 후 <b>원본 양식 그대로 워드 저장</b>.</p>
+
+  <div id="app"></div>
+</div>
+<div class="status-toast" id="toast"></div>
+
+<!--
+  스크립트 로드 순서 (forms/merit/docs/CODEMAP.md 참고)
+  1) 공용 KV 클라이언트  2) 공용 화면잠금  3) 공용 로고  4) 상태·저장  5) 워드 생성  6) 화면(마지막)
+-->
+<script src="../../shared/kv-client.js"></script>
+<script src="../../shared/auth.js"></script>
+<script src="../../shared/logo-data.js"></script>
+<script src="js/merit-state.js"></script>
+<script src="js/merit-docx.js"></script>
+<script src="js/merit-app.js"></script>
+</body>
+</html>

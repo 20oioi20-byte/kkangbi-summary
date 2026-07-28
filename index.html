@@ -25,8 +25,16 @@
     <p class="hub-sub">AICC사업2단 사업5팀 · 팀에서 반복 취합하는 자료들을 양식별로 모아둔 곳입니다.</p>
   </div>
 
+  <div class="hub-toolbar">
+    <label class="hub-toggle">
+      <input type="checkbox" id="hubShowHidden" onchange="setShowHidden(this.checked)"> 숨긴 양식도 보기
+    </label>
+    <span class="hub-hidden-count" id="hubHiddenCount"></span>
+  </div>
+
   <div class="hub-grid" id="hubGrid"></div>
 </div>
+<div class="status-toast" id="toast"></div>
 
 <script src="shared/kv-client.js"></script>
 <script src="shared/auth.js"></script>
@@ -35,15 +43,79 @@
   const HUB_FORMS = [
     {slug:'weekly', icon:'📋', name:'주간보고 취합', desc:'AICC사업5팀 주간 실적/계획 취합 · 응대율 · 워드 자동생성', status:'live'},
     {slug:'makeup', icon:'📈', name:'Make up 계획 관리', desc:'AICC사업2단 사업5팀 Make up 달성계획 월별 관리', status:'live'},
+    {slug:'merit',  icon:'🏅', name:'본부장표창 공적조서', desc:'실적 메모 → AI 초안(요약·활동·핵심가치) → 원본 양식 그대로 워드 저장', status:'live'},
   ];
-  const grid = document.getElementById('hubGrid');
-  grid.innerHTML = HUB_FORMS.map(f => `
-    <a class="hub-card" href="forms/${f.slug}/">
-      <div class="hub-card-icon">${f.icon}</div>
-      <div class="hub-card-name">${f.name}</div>
-      <div class="hub-card-desc">${f.desc}</div>
-    </a>
-  `).join('');
+
+  // 숨김 상태는 팀 공유 값(서버)이다 — 한 사람이 숨기면 모두에게 숨겨진다.
+  // 양식이 늘어날 것을 대비해 미리 넣어둔 기능(사용 안 하는 양식을 목록에서 치워두는 용도).
+  const HUB_HIDDEN_KEY = 'ktis_v11__hub_hidden';
+  let hubHidden = [];        // 숨긴 양식 slug 배열
+  let showHidden = false;    // 화면 전용(서버로 안 보냄)
+
+  let _toastTimer = null;
+  function flash(msg){
+    const el = document.getElementById('toast');
+    if(!el) return;
+    el.textContent = msg; el.style.display = 'block';
+    clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(()=>{ el.style.display='none'; }, 2400);
+  }
+
+  // 저장 직전에 서버 최신값을 다시 읽어 그 위에 내 변경만 얹는다 — 오래 켜둔 브라우저가
+  // 옛 스냅샷을 통째로 덮어써서 다른 사람의 변경을 지우는 사고를 막기 위함.
+  async function mutateHidden(mutateFn){
+    let fresh;
+    try{ const v = await apiGet(HUB_HIDDEN_KEY); fresh = Array.isArray(v) ? v : null; }catch(e){ fresh = null; }
+    if(!fresh) fresh = hubHidden.slice();
+    const result = mutateFn(fresh) || fresh;
+    await apiSet(HUB_HIDDEN_KEY, result);
+    hubHidden = result;
+    return result;
+  }
+
+  async function toggleHide(slug, ev){
+    if(ev){ ev.preventDefault(); ev.stopPropagation(); }
+    const willHide = !hubHidden.includes(slug);
+    try{
+      await mutateHidden(arr => willHide
+        ? (arr.includes(slug) ? arr : arr.concat([slug]))
+        : arr.filter(s => s !== slug));
+      flash(willHide ? '양식을 숨겼습니다' : '다시 표시합니다');
+      renderHub();
+    }catch(e){ flash('저장 실패: 네트워크를 확인해 주세요'); }
+  }
+
+  function setShowHidden(v){ showHidden = v; renderHub(); }
+
+  function renderHub(){
+    const grid = document.getElementById('hubGrid');
+    const list = HUB_FORMS.filter(f => showHidden || !hubHidden.includes(f.slug));
+    grid.innerHTML = list.length ? list.map(f => {
+      const hidden = hubHidden.includes(f.slug);
+      return `
+      <div class="hub-card-wrap${hidden ? ' is-hidden' : ''}">
+        <a class="hub-card" href="forms/${f.slug}/">
+          <div class="hub-card-icon">${f.icon}</div>
+          <div class="hub-card-name">${f.name}${hidden ? ' <span class="hub-badge">숨김</span>' : ''}</div>
+          <div class="hub-card-desc">${f.desc}</div>
+        </a>
+        <button class="hub-hide-btn" title="${hidden ? '다시 표시' : '목록에서 숨기기'}"
+          onclick="toggleHide('${f.slug}', event)">${hidden ? '표시' : '숨기기'}</button>
+      </div>`;
+    }).join('') : `<div class="hub-empty">표시할 양식이 없습니다. 「숨긴 양식도 보기」를 켜서 다시 표시할 수 있습니다.</div>`;
+
+    const n = hubHidden.length;
+    document.getElementById('hubHiddenCount').textContent = n ? `숨긴 양식 ${n}개` : '';
+  }
+
+  (async function initHub(){
+    renderHub();
+    try{
+      const v = await apiGet(HUB_HIDDEN_KEY);
+      hubHidden = Array.isArray(v) ? v : [];
+    }catch(e){ hubHidden = []; }
+    renderHub();
+  })();
 </script>
 </body>
 </html>

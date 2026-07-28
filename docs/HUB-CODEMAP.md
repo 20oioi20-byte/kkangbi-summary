@@ -13,6 +13,7 @@
 |---|---|---|---|---|
 | 주간보고 취합 | `forms/weekly/` | [CODEMAP.md](../forms/weekly/docs/CODEMAP.md) | 매주 | 배포됨 |
 | Make up 계획 관리 | `forms/makeup/` | [CODEMAP.md](../forms/makeup/docs/CODEMAP.md) | 매월 | 배포됨 |
+| 본부장표창 공적조서 | `forms/merit/` | [CODEMAP.md](../forms/merit/docs/CODEMAP.md) | 반기 | 배포됨 |
 | 하반기 Makeup 보고 | `forms/?` | — | 반기 | 미착수 |
 | 중장기전략 보고 | `forms/?` | — | ? | 미착수 |
 | 분기별 센터장 평가 | `forms/?` | — | 분기 | 미착수 |
@@ -35,7 +36,7 @@
 
 | 파일 | 역할 |
 |---|---|
-| `index.html` | 허브 홈(양식 카드 목록) — 새 양식 추가 시 `HUB_FORMS` 배열에 한 줄 추가 |
+| `index.html` | 허브 홈(양식 카드 목록) — 새 양식 추가 시 `HUB_FORMS` 배열에 한 줄 추가. 카드별 **숨기기/표시** 기능 포함(숨김 목록은 팀 공유 값 `ktis_v11__hub_hidden`에 저장 — 한 사람이 숨기면 모두에게 숨겨진다. 저장은 `mutateHidden()`으로 서버 최신값 위에 변경만 얹는다) |
 | `hub.css` | 허브 홈 전용 레이아웃 |
 | `docs/NEW-FORM-GUIDE.md` | 새 양식을 새 대화창에서 만들 때 첨부하는 가이드 |
 
