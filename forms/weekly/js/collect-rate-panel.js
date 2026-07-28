@@ -13,6 +13,11 @@ function effectiveRateValue(centerId, ry, rm, weekIdx, row){
   const def = findRateDefault(centerId, ry, rm, weekIdx);
   return def!=null ? def : '';
 }
+// 자동 계산된 월 평균은 소수점 첫째 자리까지 항상 표시한다(예: 95 -> "95.0") — 사람이 직접
+// 입력한 월값(row.monthlyManual)은 이 서식을 강제하지 않고 입력한 그대로 둔다.
+function fmtAvg1(n){
+  return (n===''||n==null||isNaN(n)) ? '' : Number(n).toFixed(1);
+}
 
 // 응대율 표의 고정(sticky) 좌측 컬럼(순서·PM·센터명) 오프셋과 표 전체 폭은 사용자가 드래그로
 // 바꿀 수 있는 컬럼 폭(state.rateColWidths)에서 매번 다시 계산해야 한다 — 렌더링 시점과
@@ -92,7 +97,7 @@ function renderRatePanel(){
     // 월 평균 자동 — 직접 입력값이 없으면 기본값 규칙도 평균에 포함시킨다
     const vals = [1,2,3,4,5].map(i=>parseFloat(effectiveRateValue(c.id, ry, rm, i, row))).filter(v=>!isNaN(v));
     const autoAvg = vals.length ? (vals.reduce((a,b)=>a+b,0)/vals.length) : '';
-    const monthly = row.monthlyManual ? (row.monthly??'') : (autoAvg===''?'':(Math.round(autoAvg*10)/10));
+    const monthly = row.monthlyManual ? (row.monthly??'') : fmtAvg1(autoAvg);
     const weekInputs = weekCols.map(w=>{
       const explicit = row['w'+w.i];
       const hasExplicit = explicit!==undefined && String(explicit).trim()!=='';
@@ -393,7 +398,7 @@ function onRateCellChange(monthKey, cid, field, value, isMonthly){
     if(!row.monthlyManual){
       const [ry, rm] = monthKey.split('-').map(Number);
       const vals = [1,2,3,4,5].map(i=>parseFloat(effectiveRateValue(cid, ry, rm, i, row))).filter(v=>!isNaN(v));
-      row.monthly = vals.length ? String(Math.round(vals.reduce((a,b)=>a+b,0)/vals.length*10)/10) : '';
+      row.monthly = vals.length ? fmtAvg1(vals.reduce((a,b)=>a+b,0)/vals.length) : '';
     }
   }
   // 이 센터 몫의 키에만 쓴다 — 다른 센터를 담당하는 PM이 동시에 입력해도 서로 덮어쓰지 않도록
@@ -453,7 +458,7 @@ function downloadRateExcel(){
     const owner = memberById(c.ownerId);
     const row = (state.monthRates[monthKey]||{})[c.id]||{};
     const vals = [1,2,3,4,5].map(i=>parseFloat(effectiveRateValue(c.id, ry, rm, i, row))).filter(v=>!isNaN(v));
-    const autoAvg = vals.length ? Math.round(vals.reduce((a,b)=>a+b,0)/vals.length*10)/10 : '';
+    const autoAvg = vals.length ? fmtAvg1(vals.reduce((a,b)=>a+b,0)/vals.length) : '';
     const monthly = row.monthlyManual ? (row.monthly??'') : autoAvg;
     rows.push([
       owner?owner.name:'', c.name, monthly,
