@@ -14,6 +14,27 @@ function effectiveRateValue(centerId, ry, rm, weekIdx, row){
   return def!=null ? def : '';
 }
 
+// 응대율 표의 고정(sticky) 좌측 컬럼(순서·PM·센터명) 오프셋과 표 전체 폭은 사용자가 드래그로
+// 바꿀 수 있는 컬럼 폭(state.rateColWidths)에서 매번 다시 계산해야 한다 — 렌더링 시점과
+// 드래그 리사이즈 도중(startColResize) 양쪽에서 같은 계산을 쓰기 위해 공용 함수로 뽑아둠.
+// overrides로 "지금 드래그 중이라 아직 state에는 반영 안 된 값"을 임시로 끼워넣을 수 있다.
+function rateColMetrics(overrides){
+  const cw = Object.assign({}, state.rateColWidths, overrides||{});
+  const total = cw.order+cw.pm+cw.cname+cw.avg+cw.wk1+cw.wk2+cw.wk3+cw.wk4+cw.wk5+cw.reason+cw.del;
+  return { total, pmLeft: cw.order, cnameLeft: cw.order+cw.pm };
+}
+// 표 DOM에 이미 그려진 상태에서(드래그 중 등) 폭/오프셋만 즉시 반영 — 리사이즈 직후
+// 다시 renderAll()을 거치지 않아도 고정 컬럼이 어긋나지 않도록 한다(2026-07-28 발견).
+function syncRateTableMetrics(overrides){
+  const table = document.getElementById('rateMatrixTable');
+  if(!table) return;
+  const m = rateColMetrics(overrides);
+  table.style.width = m.total+'px';
+  table.style.minWidth = m.total+'px';
+  table.style.setProperty('--pm-left', m.pmLeft+'px');
+  table.style.setProperty('--cname-left', m.cnameLeft+'px');
+}
+
 // 응대율 표시 월 초기값 보정 — 상단 월 이동바(renderRateMonthNavBar)와 본문 표(renderRatePanel)가
 // 둘 다 state._rateMonth를 참조하므로, 어느 쪽이 먼저 렌더링되든 안전하게 공용으로 뽑아둔다.
 function ensureRateMonth(){
@@ -62,9 +83,9 @@ function renderRatePanel(){
 
   const memberOptions = (selId)=> state.members.map(m=>`<option value="${m.id}" ${m.id===selId?'selected':''}>${escapeHtml(m.name)}</option>`).join('');
   const cw = state.rateColWidths;
-  // 모바일에서 좌우로 스크롤해도 센터명이 항상 보이도록 고정(sticky) — 앞선 두 칸(순서/PM)
-  // 폭만큼 왼쪽 오프셋을 줘서 겹치지 않게 한다. 데스크톱은 보통 스크롤이 안 생겨 영향 없음.
-  const cnameLeft = cw.order + cw.pm;
+  // 좌측 고정(sticky) 컬럼(순서/PM/센터명) 오프셋과 표 전체 폭 — CSS 쪽(--pm-left/--cname-left
+  // 커스텀 속성 + 모바일 미디어쿼리)이 실제 고정 동작을 담당하고, 여기서는 그 값만 계산한다.
+  const rcm = rateColMetrics();
 
   const rows = centers.map((c,idx)=>{
     const row = state.monthRates[monthKey][c.id] || {};
@@ -91,7 +112,7 @@ function renderRatePanel(){
         </div>
       </td>
       <td class="pm"><select data-cid="${c.id}" onchange="updateCenterField('${c.id}','owner',this.value)">${memberOptions(c.ownerId)}</select></td>
-      <td class="cname" style="position:sticky;left:${cnameLeft}px;">${c.hidden?'<span class="hidden-badge" title="숨김 처리된 센터(과거 자료 열람용)">숨김</span>':''}<input type="text" value="${escapeHtml(c.name)}" onchange="updateCenterField('${c.id}','name',this.value)"></td>
+      <td class="cname">${c.hidden?'<span class="hidden-badge" title="숨김 처리된 센터(과거 자료 열람용)">숨김</span>':''}<input type="text" value="${escapeHtml(c.name)}" onchange="updateCenterField('${c.id}','name',this.value)"></td>
       <td class="avg-col"><span class="pct-wrap"><input class="auto" type="text" inputmode="decimal" title="주차별 평균 자동 / 직접 수정 가능"
         value="${escapeHtml(String(monthly??''))}"
         onchange="onRateCellChange('${monthKey}','${c.id}','monthly',this.value,true); renderAll();"></span></td>
@@ -127,7 +148,6 @@ function renderRatePanel(){
   // 폭을 무시하고 전 컬럼을 비율대로 욱여넣어버린다 — sticky 센터명 칸까지 찌그러들면서 옆 칸과의
   // 경계 픽셀이 어긋나 흰 여백처럼 보이는 원인이었다. 컬럼 폭 합계를 table 자체 폭으로 강제 지정해
   // 항상 실제 폭 그대로 렌더링되게 하고(모자란 폭은 .rate-wrap의 가로 스크롤로 해결).
-  const totalTableWidth = cw.order+cw.pm+cw.cname+cw.avg+cw.wk1+cw.wk2+cw.wk3+cw.wk4+cw.wk5+cw.reason+cw.del;
 
   return `
   <div class="card">
@@ -150,13 +170,13 @@ function renderRatePanel(){
       </select>
     </div>
     <div class="rate-wrap">
-      <table class="rate-matrix" id="rateMatrixTable" style="width:${totalTableWidth}px;min-width:${totalTableWidth}px;">
+      <table class="rate-matrix" id="rateMatrixTable" style="width:${rcm.total}px;min-width:${rcm.total}px;--pm-left:${rcm.pmLeft}px;--cname-left:${rcm.cnameLeft}px;">
         ${colgroupHtml}
         <thead>
           <tr>
-            <th rowspan="2"></th>
-            <th rowspan="2">PM${rez('pm')}</th>
-            <th rowspan="2" style="position:sticky;left:${cnameLeft}px;z-index:6;">센터명${rez('cname')}</th>
+            <th rowspan="2" class="order-cell"></th>
+            <th rowspan="2" class="pm">PM${rez('pm')}</th>
+            <th rowspan="2" class="cname">센터명${rez('cname')}</th>
             <th class="top-title" colspan="6">${escapeHtml(monthShort)} 응대율</th>
             <th rowspan="2" class="reason-col">목표대비 미달사유 및 개선계획<br>(특이사항 포함)${rez('reason')}</th>
             <th rowspan="2">관리${rez('del')}</th>
@@ -288,6 +308,9 @@ function startColResize(e, key){
     const delta = ev.clientX - startX;
     const newWidth = Math.max(24, Math.round(startWidth + delta));
     colEl.style.width = newWidth + 'px';
+    // order/pm 폭을 드래그하는 도중에도 표 전체 폭과 고정(sticky) 오프셋을 실시간으로 맞춰준다 —
+    // 안 그러면 리사이즈 직후 다시 렌더링 전까지 고정 컬럼 사이가 어긋나 보인다(2026-07-28).
+    syncRateTableMetrics({[key]: newWidth});
   }
   function onUp(ev){
     document.removeEventListener('mousemove', onMove);
@@ -297,8 +320,9 @@ function startColResize(e, key){
     const delta = ev.clientX - startX;
     const newWidth = Math.max(24, Math.round(startWidth + delta));
     state.rateColWidths[key] = newWidth;
+    syncRateTableMetrics();
     mutateSharedObject(`${KP}_ratewidths`, state.rateColWidths, obj=>{ obj[key] = newWidth; return obj; })
-      .then(fresh=>{ state.rateColWidths = fresh; });
+      .then(fresh=>{ state.rateColWidths = fresh; syncRateTableMetrics(); });
   }
   document.addEventListener('mousemove', onMove);
   document.addEventListener('mouseup', onUp);
