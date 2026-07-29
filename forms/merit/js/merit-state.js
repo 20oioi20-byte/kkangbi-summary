@@ -22,6 +22,33 @@ const WEEKLY_CENTERS_KEY = 'ktis_v11__weekly_centers';
 const CORE_VALUE_TEXT = '고객을 가장 먼저 생각하고, 동료를 존중하며, 맡은 일은 끝까지 책임지는 자세, 권한 위임과 자발적 역량 강화를 통한 전문성 기반 과감한 실행으로 성과를 창출';
 const POSITIONS = ['부장','차장','과장','대리','사원'];
 
+// 표창 수상 시기는 "연도 + 반기"로 고른다(예: 2026-H1 = 2026년 상반기).
+// 고르면 공적기간이 그 반기에 맞게 자동으로 채워진다(원본 양식 표기: "2026. 1월~6월까지").
+function termToPeriod(term){
+  const m = /^(\d{4})-H([12])$/.exec(String(term||''));
+  if(!m) return '';
+  return m[2]==='1' ? `${m[1]}. 1월~6월까지` : `${m[1]}. 7월~12월까지`;
+}
+function termToYear(term){
+  const m = /^(\d{4})-H([12])$/.exec(String(term||''));
+  return m ? m[1] : '';
+}
+function termLabel(term){
+  const m = /^(\d{4})-H([12])$/.exec(String(term||''));
+  return m ? `${m[1]}년 ${m[2]==='1'?'상반기':'하반기'}` : '';
+}
+function currentTerm(){
+  const n = new Date();
+  return `${n.getFullYear()}-H${n.getMonth() < 6 ? 1 : 2}`;
+}
+/** 선택 목록: 작년 ~ 3년 뒤까지 상·하반기 */
+function awardTermList(){
+  const y0 = new Date().getFullYear();
+  const out = [];
+  for(let y = y0 - 1; y <= y0 + 3; y++){ out.push(`${y}-H1`); out.push(`${y}-H2`); }
+  return out;
+}
+
 let state = {
   tab: 'docs',      // docs | awards | centers
   index: [],        // 공적조서 목록 [{id,name,rank,affiliation,centerName,awarded,updatedAt}]
@@ -37,18 +64,19 @@ let state = {
 };
 
 function defaultRecord(){
-  const now = new Date();
-  const half = now.getMonth() < 6 ? '1월~6월' : '7월~12월';
+  const term = currentTerm();
   return {
     id: 'mr' + Date.now(),
+    // 대상자 정보는 원본 양식과 같이 사번·직급·성명·소속만 받는다.
+    // 소속은 센터 목록으로 검색·선택할 수 있고, 목록의 센터 필터는 여기서 centerId를 끌어낸다.
     empNo: '', rank: '', name: '', affiliation: '', centerId: '',
     meritField: "우수직원('혁신', '성장', '화합' 中 선정 기준에 해당하는 공적을 택1 기재)",
-    period: `${now.getFullYear()}. ${half}까지`,
-    ownerName: '',
+    awardTerm: term,
+    period: termToPeriod(term),
     direction: '', rawFacts: '',
     s1: '', s2: '', s3: '',
     confirmAffiliation: 'AICC사업5팀', confirmRank: '차장', confirmName: '강성호',
-    awarded: false, awardYear: String(now.getFullYear()),
+    awarded: false,
     // AI가 만들어 준 원본 초안 스냅샷. 사람이 고친 최종본과 비교해 "우리 팀이 실제로 쓰는 톤"을
     // 다음 초안 생성 때 참고 자료로 쓴다(제안3 피드백 루프).
     aiDraft: null,
@@ -179,7 +207,7 @@ async function saveCurrent(){
       const entry = {
         id: rec.id, name: rec.name, rank: rec.rank, affiliation: rec.affiliation,
         centerId: rec.centerId, centerName: centerNameById(rec.centerId),
-        ownerName: rec.ownerName, awarded: !!rec.awarded, awardYear: rec.awardYear,
+        awarded: !!rec.awarded, awardTerm: rec.awardTerm,
         // 본문은 넣지 않고 "고친 이력이 있다"는 표시만 — 초안 생성 때 어떤 건을 불러올지 고르는 용도
         hasCorrection: !!rec.hasCorrection,
         updatedAt: rec.updatedAt,

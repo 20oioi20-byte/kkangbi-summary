@@ -7,16 +7,28 @@ function collectFormIntoRecord(){
   const rec = state.current;
   if(!rec) return;
   const g = id => { const el = document.getElementById(id); return el ? el.value : undefined; };
-  ['empNo','rank','name','affiliation','meritField','period','ownerName',
+  ['empNo','rank','name','affiliation','meritField','period','awardTerm',
    'direction','rawFacts','s1','s2','s3',
-   'confirmAffiliation','confirmRank','confirmName','awardYear'].forEach(f=>{
+   'confirmAffiliation','confirmRank','confirmName'].forEach(f=>{
     const v = g('f_'+f);
     if(v !== undefined) rec[f] = v;
   });
-  const cid = document.getElementById('f_centerPick');
-  if(cid) rec.centerId = centerIdFromInput(cid.value);
+  // 소속 = 센터명. 센터 목록에 있는 이름이면 id를 끌어내 목록의 센터 필터에 쓴다.
+  rec.centerId = centerIdFromInput(rec.affiliation);
   const aw = document.getElementById('f_awarded');
   if(aw) rec.awarded = aw.checked;
+}
+/** 표창 수상 시기 선택지(작년~3년 뒤, 상·하반기). 저장된 값이 목록에 없으면 그것도 끼워 넣는다. */
+function awardTermOptions(sel){
+  const list = awardTermList();
+  if(sel && !list.includes(sel)) list.unshift(sel);
+  return list.map(t=>`<option value="${t}" ${sel===t?'selected':''}>${termLabel(t)}</option>`).join('');
+}
+/** 수상 시기를 고르면 공적기간을 그 반기에 맞게 자동으로 채운다(직접 수정도 가능). */
+function onAwardTermChange(term){
+  const p = document.getElementById('f_period');
+  if(p) p.value = termToPeriod(term);
+  if(state.current){ state.current.awardTerm = term; state.current.period = termToPeriod(term); }
 }
 /** datalist 입력값("센터명")을 센터 id로 되돌린다. 없는 이름이면 빈 값. */
 function centerIdFromInput(name){
@@ -58,7 +70,7 @@ function renderList(){
   if(state.filterCenter) rows = rows.filter(r=> r.centerId===state.filterCenter);
   if(state.filterAwarded==='y') rows = rows.filter(r=> r.awarded);
   if(state.filterAwarded==='n') rows = rows.filter(r=> !r.awarded);
-  if(q) rows = rows.filter(r=> [r.name,r.rank,r.affiliation,r.centerName,r.ownerName]
+  if(q) rows = rows.filter(r=> [r.name,r.rank,r.affiliation,r.centerName]
     .filter(Boolean).join(' ').toLowerCase().includes(q));
 
   const centerOpts = (state.centers||[]).slice()
@@ -76,7 +88,7 @@ function renderList(){
           <span class="mr-rk">${escapeHtml(r.rank||'')}</span>
           ${r.awarded?'<span class="mr-badge award">수상</span>':''}
         </div>
-        <div class="mr-row-m">${escapeHtml(r.centerName||r.affiliation||'소속 미입력')}${r.ownerName?' · 담당 '+escapeHtml(r.ownerName):''} · ${r.updatedAt?new Date(r.updatedAt).toLocaleDateString('ko-KR'):''}</div>
+        <div class="mr-row-m">${escapeHtml(r.affiliation||r.centerName||'소속 미입력')}${r.awardTerm?' · '+escapeHtml(termLabel(r.awardTerm)):''} · ${r.updatedAt?new Date(r.updatedAt).toLocaleDateString('ko-KR'):''}</div>
       </div>
       <div class="mr-row-act">
         <button class="btn-mini" title="이 내용을 복제해 다른 대상자로 작성" onclick="duplicateRecord('${r.id}')">복제</button>
@@ -144,22 +156,17 @@ function renderEditor(){
           <select class="mr-pick" onchange="if(this.value){document.getElementById('f_name').value=this.value; checkDupAward(this.value);} this.selectedIndex=0;">${memberOpts}</select>
         </div>
       </label>
-      <label class="fld">
-        <span>센터 <small>(입력하면 검색됩니다)</small></span>
-        <input id="f_centerPick" list="centerList" value="${escapeHtml(centerNameById(r.centerId))}" placeholder="센터명 입력/선택">
+      <label class="fld wide">
+        <span>소속 <small>(센터명을 입력하면 검색됩니다)</small></span>
+        <input id="f_affiliation" list="centerList" value="${escapeHtml(r.affiliation)}" placeholder="KB손해보험 부천센터">
         <datalist id="centerList">${centerList}</datalist>
       </label>
-      <label class="fld"><span>소속(양식 표기)</span><input id="f_affiliation" value="${escapeHtml(r.affiliation)}" placeholder="KB손해보험 부천센터"></label>
-      <label class="fld">
-        <span>담당자(직원)</span>
-        <div class="fld-row">
-          <input id="f_ownerName" value="${escapeHtml(r.ownerName)}" placeholder="강성호">
-          <select class="mr-pick" onchange="if(this.value){document.getElementById('f_ownerName').value=this.value;} this.selectedIndex=0;">${memberOpts}</select>
-        </div>
-      </label>
       <label class="fld wide"><span>공적 분야</span><input id="f_meritField" value="${escapeHtml(r.meritField)}"></label>
-      <label class="fld"><span>공적기간</span><input id="f_period" value="${escapeHtml(r.period)}" placeholder="2026. 1월~6월까지"></label>
-      <label class="fld"><span>표창 수상 연도</span><input id="f_awardYear" value="${escapeHtml(r.awardYear)}" placeholder="2026"></label>
+      <label class="fld">
+        <span>표창 수상 시기</span>
+        <select id="f_awardTerm" onchange="onAwardTermChange(this.value)">${awardTermOptions(r.awardTerm)}</select>
+      </label>
+      <label class="fld"><span>공적기간 <small>(수상 시기 선택 시 자동)</small></span><input id="f_period" value="${escapeHtml(r.period)}" placeholder="2026. 1월~6월까지"></label>
       <label class="fld awarded-fld">
         <span>표창 수상 여부</span>
         <label class="mr-inline-chk"><input type="checkbox" id="f_awarded" ${r.awarded?'checked':''}> 실제로 표창을 받음</label>
@@ -386,10 +393,10 @@ function addCurrentToAwards(){
   state.tab = 'awards';
   renderApp();
   const a = {
-    id:'aw'+Date.now(), year: r.awardYear || String(new Date().getFullYear()),
+    id:'aw'+Date.now(), year: termToYear(r.awardTerm) || String(new Date().getFullYear()),
     name: r.name, position: '', centerId: r.centerId,
-    centerName: centerNameById(r.centerId) || r.affiliation,
-    ownerName: r.ownerName, meritId: r.id, note: ''
+    centerName: r.affiliation || centerNameById(r.centerId),
+    ownerName: '', meritId: r.id, note: ''
   };
   state.awards.unshift(a);   // 폼에 값을 채우기 위해 임시로 넣고
   editAward(a.id);
@@ -490,7 +497,7 @@ async function generateMeritDraft(){
       body: JSON.stringify({
         direction: r.direction, rawFacts: r.rawFacts,
         name: r.name, rank: r.rank,
-        affiliation: r.affiliation || centerNameById(r.centerId),
+        affiliation: r.affiliation,
         meritField: r.meritField, period: r.period, samples, corrections,
       })
     });
