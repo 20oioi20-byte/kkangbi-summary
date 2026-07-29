@@ -15,8 +15,8 @@ function collectFormIntoRecord(){
   });
   // 소속 = 센터명. 센터 목록에 있는 이름이면 id를 끌어내 목록의 센터 필터에 쓴다.
   rec.centerId = centerIdFromInput(rec.affiliation);
-  const aw = document.getElementById('f_awarded');
-  if(aw) rec.awarded = aw.checked;
+  // "표창 수상 여부"는 여기서 다루지 않는다 — 작성 시점엔 실제 수상 여부를 알 수 없고,
+  // 나중에 공적조서 목록에서 체크하면 toggleAwarded()가 서버 값을 직접 갱신한다.
 }
 /** 표창 수상 시기 선택지(작년~3년 뒤, 상·하반기). 저장된 값이 목록에 없으면 그것도 끼워 넣는다. */
 function awardTermOptions(sel){
@@ -163,10 +163,9 @@ function renderEditor(){
         <select id="f_awardTerm" onchange="onAwardTermChange(this.value)">${awardTermOptions(r.awardTerm)}</select>
       </label>
       <label class="fld"><span>공적기간 <small>(수상 시기 선택 시 자동)</small></span><input id="f_period" value="${escapeHtml(r.period)}" placeholder="2026. 1월~6월까지"></label>
-      <label class="fld awarded-fld mr-inline-chk">
-        <input type="checkbox" id="f_awarded" ${r.awarded?'checked':''}> 표창 수상 여부 — 실제로 표창을 받음
-      </label>
     </div>
+    <p class="hint">표창을 실제로 받았는지는 작성 시점엔 알 수 없으므로 여기서 다루지 않습니다 — 나중에
+      <b>공적조서 목록</b>에서 체크하면 자동으로 수상자 명단에 등록되고, 체크를 풀면 명단에서도 함께 빠집니다.</p>
   </div>
 
   <div class="card mr-input-card">
@@ -212,7 +211,6 @@ function renderEditor(){
     <div class="form-actions">
       <button class="btn btn-primary" onclick="saveCurrent()">💾 저장</button>
       <button class="btn btn-green" onclick="downloadMeritWord()">⬇ 워드로 저장 (양식 그대로)</button>
-      <button class="btn btn-outline" onclick="addCurrentToAwards()">🏆 수상자 명단에 추가</button>
     </div>
   </div>`;
 }
@@ -380,32 +378,6 @@ function submitAward(id, meritId){
     ownerName: v('a_owner').trim(), note: v('a_note').trim(),
   });
 }
-/** 편집 중인 공적조서를 수상자 명단으로 옮겨 담는다(대상자 정보 자동 채움). */
-function addCurrentToAwards(){
-  collectFormIntoRecord();
-  const r = state.current;
-  if(!r.name){ flash('먼저 성명을 입력하세요'); return; }
-  // 명단에 추가한다는 건 실제로 받았다는 뜻이므로, 이 공적조서의 "표창 수상 여부"도
-  // 함께 체크해서 저장한다 — saveCurrent()가 저장 직전 DOM 체크박스를 다시 읽으므로
-  // state뿐 아니라 실제 체크박스도 켜 둬야 덮어써지지 않는다.
-  r.awarded = true;
-  const awEl = document.getElementById('f_awarded');
-  if(awEl) awEl.checked = true;
-  saveCurrent();
-  state.tab = 'awards';
-  renderApp();
-  const a = {
-    id:'aw'+Date.now(), year: termToYear(r.awardTerm) || String(new Date().getFullYear()),
-    name: r.name, position: '', centerId: r.centerId,
-    centerName: r.affiliation || centerNameById(r.centerId),
-    ownerName: '', meritId: r.id, note: ''
-  };
-  state.awards.unshift(a);   // 폼에 값을 채우기 위해 임시로 넣고
-  editAward(a.id);
-  state.awards.shift();      // 저장 전까지는 목록에 남기지 않는다
-  flash('공적조서에 "수상" 표시됨 — 직책을 선택하고 저장하세요');
-}
-
 // ── 센터 관리 ───────────────────────────────────────────────
 function renderCenters(){
   const q = (state.centerQ||'').trim().toLowerCase();

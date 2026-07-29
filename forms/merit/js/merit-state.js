@@ -234,6 +234,10 @@ async function deleteRecord(id){
 }
 
 /** 목록에서 바로 "표창 수상" 체크를 토글한다(본문은 건드리지 않음). */
+// 공적조서 목록에서 "수상" 체크를 켜면 그 대상자를 수상자 명단에 자동 등록하고,
+// 체크를 풀면 그 공적조서로 만들어진 명단 항목을 자동으로 지운다(연동은 meritId로 추적).
+// 작성 시점엔 실제 수상 여부를 알 수 없으므로 이 체크는 본문 편집화면이 아니라
+// 여기(목록)에서만 다룬다 — collectFormIntoRecord()는 awarded를 건드리지 않는다.
 async function toggleAwarded(id, checked){
   try{
     const rec = await apiGet(meritRecKey(id));
@@ -244,7 +248,29 @@ async function toggleAwarded(id, checked){
       return arr;
     });
     if(state.current && state.current.id===id) state.current.awarded = !!checked;
-    flash(checked ? '표창 수상으로 표시했습니다' : '표창 수상 표시를 해제했습니다');
+
+    if(checked && rec){
+      // 이 공적조서에서 만들어진 명단 항목이 아직 없을 때만 새로 만든다(중복 등록 방지).
+      if(!(state.awards||[]).some(a=>a.meritId===id)){
+        const entry = {
+          id: 'aw' + Date.now(), meritId: id,
+          year: termToYear(rec.awardTerm) || String(new Date().getFullYear()),
+          name: rec.name, position: '', centerId: rec.centerId,
+          centerName: rec.affiliation || centerNameById(rec.centerId),
+          ownerName: '', note: '',
+        };
+        await apiSet(awardKey(entry.id), entry);
+        state.awards.unshift(entry);
+      }
+      flash('표창 수상으로 표시했습니다 — 수상자 명단에 자동 등록됨');
+    } else if(!checked){
+      const linked = (state.awards||[]).filter(a=>a.meritId===id);
+      if(linked.length){
+        await Promise.all(linked.map(a=>apiDelete(awardKey(a.id))));
+        state.awards = state.awards.filter(a=>a.meritId!==id);
+      }
+      flash('표창 수상 표시를 해제했습니다 — 수상자 명단에서도 제외됨');
+    }
     renderApp();
   }catch(e){ flash('저장 실패: 네트워크를 확인해 주세요'); }
 }
