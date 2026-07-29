@@ -79,7 +79,11 @@
     padding:7px 0;user-select:none;}
   .mr-inline-chk input{margin:0;cursor:pointer;}
   .ref-chk{margin-top:4px;}
-  .awarded-fld .mr-inline-chk{border:1px solid #e8cf8a;background:#fffdf5;border-radius:5px;padding:6px 9px;}
+  /* "표창 수상 여부" 체크박스는 .fld(세로 배치)와 .mr-inline-chk(가로 배치)를 한 요소에 같이
+     써서 "체크박스 + 문구"가 한 줄로 보이게 한다 — .fld의 세로 배치를 명시적으로 덮어씀. */
+  .fld.awarded-fld{flex-direction:row;align-items:center;justify-content:flex-start;
+    border:1px solid #e8cf8a;background:#fffdf5;border-radius:5px;padding:8px 10px;
+    font-size:12.5px;color:#5c4300;}
   .mr-input-card{background:#f7faff;border:1px solid #b8d4ea;}
 
   /* 중복 수상 경고 배너 */

@@ -150,11 +150,7 @@ function renderEditor(){
       <label class="fld"><span>직급(호칭)</span><input id="f_rank" value="${escapeHtml(r.rank)}" placeholder="팀장 / 센터장"></label>
       <label class="fld">
         <span>성명</span>
-        <div class="fld-row">
-          <input id="f_name" value="${escapeHtml(r.name)}" placeholder="이름"
-            oninput="checkDupAward(this.value)">
-          <select class="mr-pick" onchange="if(this.value){document.getElementById('f_name').value=this.value; checkDupAward(this.value);} this.selectedIndex=0;">${memberOpts}</select>
-        </div>
+        <input id="f_name" value="${escapeHtml(r.name)}" placeholder="이름" oninput="checkDupAward(this.value)">
       </label>
       <label class="fld wide">
         <span>소속 <small>(센터명을 입력하면 검색됩니다)</small></span>
@@ -167,9 +163,8 @@ function renderEditor(){
         <select id="f_awardTerm" onchange="onAwardTermChange(this.value)">${awardTermOptions(r.awardTerm)}</select>
       </label>
       <label class="fld"><span>공적기간 <small>(수상 시기 선택 시 자동)</small></span><input id="f_period" value="${escapeHtml(r.period)}" placeholder="2026. 1월~6월까지"></label>
-      <label class="fld awarded-fld">
-        <span>표창 수상 여부</span>
-        <label class="mr-inline-chk"><input type="checkbox" id="f_awarded" ${r.awarded?'checked':''}> 실제로 표창을 받음</label>
+      <label class="fld awarded-fld mr-inline-chk">
+        <input type="checkbox" id="f_awarded" ${r.awarded?'checked':''}> 표창 수상 여부 — 실제로 표창을 받음
       </label>
     </div>
   </div>
@@ -390,6 +385,13 @@ function addCurrentToAwards(){
   collectFormIntoRecord();
   const r = state.current;
   if(!r.name){ flash('먼저 성명을 입력하세요'); return; }
+  // 명단에 추가한다는 건 실제로 받았다는 뜻이므로, 이 공적조서의 "표창 수상 여부"도
+  // 함께 체크해서 저장한다 — saveCurrent()가 저장 직전 DOM 체크박스를 다시 읽으므로
+  // state뿐 아니라 실제 체크박스도 켜 둬야 덮어써지지 않는다.
+  r.awarded = true;
+  const awEl = document.getElementById('f_awarded');
+  if(awEl) awEl.checked = true;
+  saveCurrent();
   state.tab = 'awards';
   renderApp();
   const a = {
@@ -401,7 +403,7 @@ function addCurrentToAwards(){
   state.awards.unshift(a);   // 폼에 값을 채우기 위해 임시로 넣고
   editAward(a.id);
   state.awards.shift();      // 저장 전까지는 목록에 남기지 않는다
-  flash('직책을 선택하고 저장하세요');
+  flash('공적조서에 "수상" 표시됨 — 직책을 선택하고 저장하세요');
 }
 
 // ── 센터 관리 ───────────────────────────────────────────────
