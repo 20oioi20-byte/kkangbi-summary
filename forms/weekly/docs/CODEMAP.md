@@ -23,14 +23,14 @@
 
 | 작업 주제 | 파일 | 비고 |
 |---|---|---|
-| 주차 계산(1주=1일~그주 일요일, 이후 월~일) | `js/collect-dates.js` | `getWeeksOfMonth`, `weekMetaFromDate` |
+| 주차 계산(항상 월~일 7일, 월 경계 넘어 계속 이어짐 — 2026-07-30 변경) | `js/collect-dates.js` | `getWeeksOfMonth`, `weekMetaFromDate` |
 | 담당자/센터 기본값, 저장(Supabase `rpt_kv` 경유), 공용 헬퍼 | `js/collect-state.js` | `DEFAULT_MEMBERS`, `DEFAULT_CENTERS`, `loadState`, `mutateSharedList/Object`, 저장키 접두어 `KP='ktis_v11__weekly'` |
 | 워드 취합 규칙 엔진(가나다/○/※/괄호/소관센터 병합) | `js/collect-docword-rules.js` | `aggregateSection`, `tokenizeParens`, `docLinesToHtml` |
 | DOCX 실제 생성(표 구조·색상·폰트·자간) | `js/collect-docx-export.js` | `buildDocxBlob`, `wHeaderCell`, `wParagraph` — `../../shared/logo-data.js`의 `KT_LOGO_DATAURI` 사용 |
 | 메인 탭(취합 최종본·현황·주차이력) | `js/collect-main-panel.js` | `renderMainPanel`, `doAggregate`, `saveWordAndArchive` |
 | 담당자 탭(개인 작성·히스토리, **AI 초안은 강성호(m1)만**) | `js/collect-member-panel.js` | `renderMemberPanel`, `saveMemberDraft`, `generateAiDraft`(m1 전용, `/api/ai-weekly-draft` 호출) |
 | 응대율 탭(표·컬럼리사이즈·순서변경·담당자 필터·기본값 규칙) | `js/collect-rate-panel.js` | `renderRatePanel`, `startColResize`, `findRateDefault`/`effectiveRateValue`(기본값 규칙), `setRateMemberFilter` |
-| **(신규)** AI 초안 서버 프록시 | `api/ai-weekly-draft.js` | 캘린더/일일보고/업무로그(mt_meetings 등)/직전주 작성분을 모아 Claude 호출 — 강성호 전용, 아래 §6 참고 |
+| AI 초안 서버 프록시 | `api/ai-weekly-draft.js` | 일일보고/업무로그/직전주 작성분을 모아 Claude 호출(캘린더 일정은 제외, 2026-07-30) — 강성호 전용, 아래 §6 참고 |
 | 자료보관함 탭 | `js/collect-archive-panel.js` | `renderArchivePanel` |
 | 관리 탭(담당자/센터 CRUD, 허브 비밀번호 변경) | `js/collect-manage-panel.js` | `renderManagePanel`, `changeLockPw`(→`shared/auth.js`의 `changeHubPw` 호출) |
 | 탭 전환·전체 렌더링·초기화 | `js/collect-app.js` | `switchTab`, `renderAll`, 최하단 `init()` |
@@ -59,9 +59,16 @@ shared/kv-client.js → shared/auth.js → collect-dates.js → collect-state.js
 ### collect-dates.js
 | 함수 | 역할 |
 |---|---|
-| `getWeeksOfMonth(year, month)` | 그 달의 주차 목록 계산 (1주=1일~그 주 일요일 규칙) |
+| `getWeeksOfMonth(year, month)` | 그 달에 월요일이 속한 주들을 순서대로 나열(항상 월~일 7일 고정, 월 말이라도 자르지 않음 — 예: 8월 5주차는 8.31~9.6까지 9월로 넘어감) |
+| `findWeekOfMonth(date)` | 날짜 → 소속 주차. 그 달 첫 월요일 이전 며칠(예: 1일이 화~일요일)은 전달의 마지막 주로 귀속 |
 | `weekMetaFromDate(d)` | 특정 날짜가 속한 주차 메타 정보(실적/계획 기간 등) |
-| `nextWeekEntry` / `prevWeekEntry` | 월 경계를 자동으로 넘기는 주차 이동 |
+| `nextWeekEntry` / `prevWeekEntry` | 월 경계를 자동으로 넘기는 주차 이동 — 주가 이어지므로 별도 처리 없이 그대로 동작 |
+
+**주의**: 주차 경계 계산 방식을 2026-07-30에 바꿨다(예전엔 매월 1일에 주차가 강제로 다시 시작해서
+말일 주가 짧게 잘렸음 → 지금은 월요일~일요일 7일이 월 경계와 무관하게 계속 이어짐). 이미 저장된
+`weekKey`(예: `"2026-07-W4"`)가 가리키는 날짜 범위도 이 변경으로 같이 바뀐다 — 데이터 자체가
+지워지진 않지만 예전에 그 주차 번호로 보던 날짜와 지금 보이는 날짜가 다를 수 있다. 이 계산 방식을
+다시 "매월 1일에 리셋"으로 되돌리지 말 것(사용자가 명시적으로 요청해서 바꾼 것).
 
 ### collect-docword-rules.js
 | 함수 | 역할 |
@@ -164,7 +171,9 @@ A가 자기 것만 고쳤는데 B의 내용까지 바뀌어 보이는 사고가 
 - **위치/명칭**: 담당자 탭 중 강성호(m1) 탭에서만, 실적 입력란 라벨 오른쪽 위에 "🤖 깡비서 초안" 버튼. 클릭하면 실적+계획을 한 번에 채운다(자동 저장 안 함 — 확인 후 「이번 주차 저장」을 눌러야 반영).
 - **다른 담당자에는 절대 넣지 않는다** — 깡비서.kr에 본인 데이터가 있는 건 강성호뿐이라는 게 전제. `renderMemberPanel`에서 `memberId==='m1'` 조건으로 버튼 자체를 렌더링 안 하고, `generateAiDraft`도 첫 줄에서 `memberId!=='m1'`이면 즉시 return.
 - **자료 출처** (`api/ai-weekly-draft.js`가 서버에서 조회, 클라이언트는 기간만 넘김) — `C:\Users\user\kkangbi-calendar`의 실제 운영 코드(`js/storage.js`, `js/worklog.js`, `js/calendar-helpers.js`)로 스키마 확인·검증 완료:
-  - 캘린더 일정: `ktis_v11__events__{YYYY-MM}` (**월 단위** 키, 연도 단위 아님 — `evMonthKey()` 기준). 이벤트 필드: `title/date/time/memo` 등
+  - **캘린더 "일정"(이벤트)은 의도적으로 조회하지 않는다** — 회의/약속 제목 같은 단순 일정이 초안에서
+    실제 업무 성과보다 과도하게 비중을 차지한다는 피드백(2026-07-30)에 따라 제거. `ktis_v11__events__*`
+    키를 다시 추가하지 말 것 — 대신 아래 일일보고를 실적/계획의 핵심 근거로 쓴다.
   - 일일보고: `ktis_v11__reports`의 `dailyReports` 배열 (`{id,date,content,createdAt}`)
   - 업무로그: `ktis_v11__worklogs`(구 통합키) + `ktis_v11__worklog__{id}`(신 항목별 키)를 id로 병합, **항목별 키가 우선**(깡비서 본체 `storage.js`와 동일한 병합 규칙) — rpt_kv이지 별도 Postgres 테이블 아님. 필드: `date/type/center/title/oneLiner/aiSummary/followUp/nextMeeting`
   - 이 시스템 자체의 직전 주 강성호 작성분: `ktis_v11__weekly__rpt__{prevWeekKey}__m1`

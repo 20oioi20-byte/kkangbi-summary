@@ -1,12 +1,16 @@
 // "깡비서 초안" — 강성호(m1) 전용 AI 초안 생성.
-// 깡비서.kr 캘린더/일일보고/업무로그(실제 운영 코드 C:\Users\user\kkangbi-calendar 기준으로
+// 깡비서.kr 일일보고/업무로그(실제 운영 코드 C:\Users\user\kkangbi-calendar 기준으로
 // 스키마 확인, 2026-07-26) + 이 시스템의 직전 주 강성호 작성 데이터를 모아 Claude에게 실적/계획
 // 초안을 만들게 한다. 다른 담당자는 깡비서에 본인 데이터가 없어 이 기능을 쓰지 않는다
 // (클라이언트도 m1에만 버튼을 노출하지만, 이 파일 자체가 항상 강성호 관련 자료만 조회한다 —
 // memberId를 파라미터로 받지 않음).
 //
-// 자료 조회가 일부 실패해도(예: 해당 월 이벤트 없음) 전체 요청을 실패시키지 않는다 — 있는
-// 자료만으로 초안을 만들고, 부족하면 AI가 "(확인 필요)"로 표시하도록 지시한다.
+// 캘린더 "일정"(이벤트)은 의도적으로 제외한다 — 회의/약속 제목 같은 단순 일정 항목이 초안에서
+// 실제 업무 성과보다 과도하게 비중을 차지한다는 사용자 피드백(2026-07-30)에 따라, 일일보고
+// 내용을 실적/계획 작성의 주 근거로 삼는다(업무로그도 계속 함께 참고).
+//
+// 자료 조회가 일부 실패해도 전체 요청을 실패시키지 않는다 — 있는 자료만으로 초안을 만들고,
+// 부족하면 AI가 "(확인 필요)"로 표시하도록 지시한다.
 const SB_URL = process.env.SUPABASE_URL;
 const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
@@ -112,17 +116,6 @@ function inRange(dateStr, start, end) {
   const d = String(dateStr).slice(0, 10);
   return d >= start && d <= end;
 }
-function monthKeysInRange(start, end) {
-  const keys = [];
-  let [y, m] = start.slice(0, 7).split('-').map(Number);
-  const [ey, em] = end.slice(0, 7).split('-').map(Number);
-  let guard = 0;
-  while ((y < ey || (y === ey && m <= em)) && guard++ < 24) {
-    keys.push(`${y}-${String(m).padStart(2, '0')}`);
-    m++; if (m > 12) { m = 1; y++; }
-  }
-  return keys;
-}
 function fmtList(arr, mapper) {
   return arr.length ? arr.map(mapper).join('\n') : '(자료 없음)';
 }
@@ -201,26 +194,19 @@ export default async function handler(req, res) {
     // 자료 조회는 서로 의존관계가 없어 병렬로 실행한다(순차 호출 대비 대기 시간 단축).
     // 단, AI 모델 자체가 답을 생성하는 시간(수 초)은 이 최적화와 무관하게 그대로 걸린다 —
     // callGatewayClaude/callClaudeDirect 호출 자체가 병목이며 더 줄일 수 있는 여지가 없다.
-    const months = monthKeysInRange(windowStart, windowEnd);
-    const [eventsByMonth, reportsBlob, wlAgg, wlItems, prevReport] = await Promise.all([
-      Promise.all(months.map(mk => sbGetKV(`ktis_v11__events__${mk}`))),
+    const [reportsBlob, wlAgg, wlItems, prevReport] = await Promise.all([
       sbGetKV('ktis_v11__reports'),
       sbGetKV('ktis_v11__worklogs'),
       listResolvedKV(WL_ITEM_PREFIX),
       prevWeekKey ? sbGetKV(`ktis_v11__weekly__rpt__${prevWeekKey}__m1`) : Promise.resolve(null),
     ]);
 
-    // 1) 캘린더 일정 — 월별 키(ktis_v11__events__{YYYY-MM})
-    let events = [];
-    eventsByMonth.forEach(arr => { if (Array.isArray(arr)) events.push(...arr); });
-    events = events.filter(e => inRange(e && e.date, windowStart, windowEnd));
-
-    // 2) 일일보고 (ktis_v11__reports.dailyReports)
+    // 1) 일일보고 (ktis_v11__reports.dailyReports) — 캘린더 "일정"은 의도적으로 제외(위 주석 참고).
     const dailyReports = (reportsBlob && Array.isArray(reportsBlob.dailyReports))
       ? reportsBlob.dailyReports.filter(r => inRange(r && r.date, windowStart, windowEnd))
       : [];
 
-    // 3) 업무로그 — 구 통합 키(ktis_v11__worklogs) + 항목별 키(ktis_v11__worklog__{id}) 병합,
+    // 2) 업무로그 — 구 통합 키(ktis_v11__worklogs) + 항목별 키(ktis_v11__worklog__{id}) 병합,
     //    항목별이 우선(같은 id면 항목별 값으로 덮어씀) — 깡비서 본체 storage.js와 동일한 병합 규칙.
     const wlMap = new Map();
     ((wlAgg && wlAgg.workLogs) || []).forEach(w => { if (w && w.id) wlMap.set(w.id, w); });
@@ -229,12 +215,9 @@ export default async function handler(req, res) {
       .filter(w => inRange(w && w.date, windowStart, windowEnd))
       .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
       .slice(0, 100);
-    // 4) 이 시스템 자체의 직전 주 강성호 작성 내용은 위 Promise.all에서 이미 조회됨(prevReport)
+    // 3) 이 시스템 자체의 직전 주 강성호 작성 내용은 위 Promise.all에서 이미 조회됨(prevReport)
 
     const contextText = `
-[캘린더 일정 (${windowStart} ~ ${windowEnd})]
-${fmtList(events, e => `- ${e.date}${e.time ? ' ' + e.time : ''} ${e.title || ''}${e.memo ? ' : ' + e.memo : ''}`)}
-
 [일일보고]
 ${fmtList(dailyReports, r => `- ${r.date}: ${r.content || ''}`)}
 
@@ -247,7 +230,8 @@ ${fmtList(workLogs, w => `- ${w.date} [${WL_TYPE_LABEL[w.type] || w.type || ''}]
 `.trim();
 
     const systemPrompt = `당신은 KTIS AICC사업2단 사업5팀 강성호 PM의 주간보고 작성을 돕는 보조입니다.
-아래 자료(캘린더 일정, 일일보고, 업무로그, 직전 주 작성 내용)를 바탕으로 이번 주 "실적"과 다음 주 "계획"의 초안을 작성하세요.
+아래 자료(일일보고, 업무로그, 직전 주 작성 내용)를 바탕으로 이번 주 "실적"과 다음 주 "계획"의 초안을 작성하세요.
+일일보고 내용을 실적/계획의 핵심 근거로 삼고, 업무로그는 세부 사실 확인·보완용으로 참고하세요.
 
 반드시 지킬 형식 규칙:
 1. 안건 제목은 "가.", "나.", "다." 순서로 시작한다(하나의 안건 = 하나의 제목 줄). 안건과 안건 사이에 빈 줄을 넣지 말고 바로 이어서 작성한다.
