@@ -83,8 +83,8 @@ function renderAll(){
 }
 
 (function init(){
-  // 시드 주차(7.20~7.26 = 4주차)로 기본 진입
-  anchorDate = new Date(2026, 6, 22); // 2026-07-22
+  // 오늘 날짜가 속한 주차로 기본 진입(예전엔 개발용 고정 날짜(2026-07-22)로 하드코딩돼 있었음 — 2026-08-04 수정)
+  anchorDate = new Date();
   document.getElementById('weekDate').value = fmtISO(anchorDate);
   refreshWeekChrome();
   // 마이그레이션: 예전 키 무시
