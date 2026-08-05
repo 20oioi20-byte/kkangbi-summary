@@ -60,7 +60,7 @@ function renderRatePanel(){
   const meta = currentMeta();
   const {y:ry, m:rm} = ensureRateMonth();
   const monthKey = `${ry}-${pad2(rm)}`;
-  const weeks = getWeeksOfMonth(ry, rm);
+  const weeks = getRateWeeksOfMonth(ry, rm); // 응대율은 월 anchored 주차(주간보고와 기준 다름)
   const monthShort = `${String(ry).slice(2)}.${rm}월`;
   if(!state.monthRates[monthKey]) state.monthRates[monthKey]={};
 
@@ -448,7 +448,7 @@ function downloadRateExcel(){
   const ry = state._rateMonth?.y ?? meta.year;
   const rm = state._rateMonth?.m ?? meta.month;
   const monthKey = `${ry}-${pad2(rm)}`;
-  const weeks = getWeeksOfMonth(ry, rm);
+  const weeks = getRateWeeksOfMonth(ry, rm); // 응대율은 월 anchored 주차(주간보고와 기준 다름)
   const centers = visibleCenters();
   const header = ['PM','센터명',`${rm}월`, ...[1,2,3,4,5].map(i=>{
     const w=weeks[i-1]; return w?`${i}주(${w.rangeLabel})`:`${i}주`;

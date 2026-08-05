@@ -23,7 +23,8 @@
 
 | 작업 주제 | 파일 | 비고 |
 |---|---|---|
-| 주차 계산(항상 월~일 7일, 월 경계 넘어 계속 이어짐 — 2026-07-30 변경) | `js/collect-dates.js` | `getWeeksOfMonth`, `weekMetaFromDate` |
+| 주차 계산 — **주간보고 본문**(항상 월~일 7일, 월 경계 넘어 계속 이어짐) | `js/collect-dates.js` | `getWeeksOfMonth`, `weekMetaFromDate` |
+| 주차 계산 — **응대율**(월 anchored, 매월 1일에 다시 시작·말일에 잘림 — 주간보고와 기준 다름, 2026-07-30) | `js/collect-dates.js` | `getRateWeeksOfMonth` — `collect-rate-panel.js`만 사용 |
 | 담당자/센터 기본값, 저장(Supabase `rpt_kv` 경유), 공용 헬퍼 | `js/collect-state.js` | `DEFAULT_MEMBERS`, `DEFAULT_CENTERS`, `loadState`, `mutateSharedList/Object`, 저장키 접두어 `KP='ktis_v11__weekly'` |
 | 워드 취합 규칙 엔진(가나다/○/※/괄호/소관센터 병합) | `js/collect-docword-rules.js` | `aggregateSection`, `tokenizeParens`, `docLinesToHtml` |
 | DOCX 실제 생성(표 구조·색상·폰트·자간) | `js/collect-docx-export.js` | `buildDocxBlob`, `wHeaderCell`, `wParagraph` — `../../shared/logo-data.js`의 `KT_LOGO_DATAURI` 사용 |
@@ -57,18 +58,23 @@ shared/kv-client.js → shared/auth.js → collect-dates.js → collect-state.js
 ## 3. 도메인별 힌트 (파일 내부 함수)
 
 ### collect-dates.js
-| 함수 | 역할 |
-|---|---|
-| `getWeeksOfMonth(year, month)` | 그 달에 월요일이 속한 주들을 순서대로 나열(항상 월~일 7일 고정, 월 말이라도 자르지 않음 — 예: 8월 5주차는 8.31~9.6까지 9월로 넘어감) |
-| `findWeekOfMonth(date)` | 날짜 → 소속 주차. 그 달 첫 월요일 이전 며칠(예: 1일이 화~일요일)은 전달의 마지막 주로 귀속 |
-| `weekMetaFromDate(d)` | 특정 날짜가 속한 주차 메타 정보(실적/계획 기간 등) |
-| `nextWeekEntry` / `prevWeekEntry` | 월 경계를 자동으로 넘기는 주차 이동 — 주가 이어지므로 별도 처리 없이 그대로 동작 |
+**이 파일엔 서로 다른 주차 계산 함수 2벌이 있다 — 절대 하나로 합치지 말 것(2026-07-30, 사용자가
+두 화면의 주차 기준이 서로 달라야 한다고 명시적으로 요청).**
 
-**주의**: 주차 경계 계산 방식을 2026-07-30에 바꿨다(예전엔 매월 1일에 주차가 강제로 다시 시작해서
-말일 주가 짧게 잘렸음 → 지금은 월요일~일요일 7일이 월 경계와 무관하게 계속 이어짐). 이미 저장된
-`weekKey`(예: `"2026-07-W4"`)가 가리키는 날짜 범위도 이 변경으로 같이 바뀐다 — 데이터 자체가
-지워지진 않지만 예전에 그 주차 번호로 보던 날짜와 지금 보이는 날짜가 다를 수 있다. 이 계산 방식을
-다시 "매월 1일에 리셋"으로 되돌리지 말 것(사용자가 명시적으로 요청해서 바꾼 것).
+| 함수 | 쓰이는 곳 | 규칙 |
+|---|---|---|
+| `getWeeksOfMonth(year, month)` | 주간보고 본문(담당자 탭 실적/계획 기간, `collect-app.js`/`collect-main-panel.js`) | 그 달에 **월요일**이 속한 주들을 순서대로 나열. 항상 월~일 7일 고정, 월 말이라도 자르지 않고 다음 달로 이어짐(예: 8월 5주차 = 8.31~9.6) |
+| `getRateWeeksOfMonth(year, month)` | 응대율(`collect-rate-panel.js`)만 | **월 anchored** — 매월 1일에 주차가 다시 시작(1주차="1일~그 주 일요일"), 마지막 주는 월말에서 잘림(예: 7월 5주차=7.27~7.31, 7일 안 채움) |
+| `findWeekOfMonth(date)` | 주간보고 본문 | 날짜 → 소속 주차(`getWeeksOfMonth` 기준). 그 달 첫 월요일 이전 며칠(예: 1일이 화~일요일)은 전달의 마지막 주로 귀속 |
+| `weekMetaFromDate(d)` | 주간보고 본문 | 특정 날짜가 속한 주차 메타 정보(실적/계획 기간 등) — `getWeeksOfMonth` 기준 |
+| `nextWeekEntry` / `prevWeekEntry` | 주간보고 본문 | 월 경계를 자동으로 넘기는 주차 이동(`getWeeksOfMonth` 기준) — 주가 이어지므로 별도 처리 없이 그대로 동작 |
+
+**주의**: 예전엔 이 두 화면이 같은 함수(`getWeeksOfMonth`)를 공유하며 매월 1일에 주차가 강제로
+다시 시작했다(말일 주가 짧게 잘림). 2026-07-30에 주간보고 본문 쪽만 "월~일 7일이 월 경계와
+무관하게 계속 이어지는" 방식으로 바꿨는데, 응대율까지 같이 바뀌어버려서 사용자가 다시 원래
+방식(월 anchored)으로 되돌려 달라고 요청 → `getRateWeeksOfMonth`로 분리해서 응대율만 원래
+동작으로 복원했다. 새 기능을 만들 때 두 함수 중 어느 걸 쓸지 반드시 확인할 것 — 잘못 섞으면
+저장된 `weekKey`/`rate__{monthKey}__{centerId}`가 가리키는 날짜 범위가 또 어긋난다.
 
 ### collect-docword-rules.js
 | 함수 | 역할 |
