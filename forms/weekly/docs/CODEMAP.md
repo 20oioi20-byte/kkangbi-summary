@@ -26,9 +26,9 @@
 | 주차 계산 — **주간보고 본문**(항상 월~일 7일, 월 경계 넘어 계속 이어짐) | `js/collect-dates.js` | `getWeeksOfMonth`, `weekMetaFromDate` |
 | 주차 계산 — **응대율**(월 anchored, 매월 1일에 다시 시작·말일에 잘림 — 주간보고와 기준 다름, 2026-07-30) | `js/collect-dates.js` | `getRateWeeksOfMonth` — `collect-rate-panel.js`만 사용 |
 | 담당자/센터 기본값, 저장(Supabase `rpt_kv` 경유), 공용 헬퍼 | `js/collect-state.js` | `DEFAULT_MEMBERS`, `DEFAULT_CENTERS`, `loadState`, `mutateSharedList/Object`, 저장키 접두어 `KP='ktis_v11__weekly'` |
-| 워드 취합 규칙 엔진(가나다/○/※/괄호/소관센터 병합) | `js/collect-docword-rules.js` | `aggregateSection`, `tokenizeParens`, `docLinesToHtml` |
+| 워드 취합 규칙 엔진(가나다/○/※/괄호/소관센터 병합, `overrides`로 AI 정리본 주입 가능) | `js/collect-docword-rules.js` | `aggregateSection`, `tokenizeParens`, `docLinesToHtml` |
 | DOCX 실제 생성(표 구조·색상·폰트·자간) | `js/collect-docx-export.js` | `buildDocxBlob`, `wHeaderCell`, `wParagraph` — `../../shared/logo-data.js`의 `KT_LOGO_DATAURI` 사용 |
-| 메인 탭(취합 최종본·현황·주차이력) | `js/collect-main-panel.js` | `renderMainPanel`, `doAggregate`, `saveWordAndArchive` |
+| 메인 탭(취합 최종본·현황·주차이력) | `js/collect-main-panel.js` | `renderMainPanel`, `doAggregate`(async, 미변환 원문 자동 정리 §8), `saveWordAndArchive` |
 | 담당자 탭(개인 작성·히스토리, **AI 초안은 강성호(m1)만**, **양식 자동정리는 전 담당자**) | `js/collect-member-panel.js` | `renderMemberPanel`, `saveMemberDraft`(전 담당자, `/api/format-weekly-entry` 호출), `generateAiDraft`(m1 전용, `/api/ai-weekly-draft` 호출) |
 | 응대율 탭(표·컬럼리사이즈·순서변경·담당자 필터·기본값 규칙) | `js/collect-rate-panel.js` | `renderRatePanel`, `startColResize`, `findRateDefault`/`effectiveRateValue`(기본값 규칙), `setRateMemberFilter` |
 | AI 초안 서버 프록시 | `api/ai-weekly-draft.js` | 일일보고/업무로그/직전주 작성분을 모아 Claude 호출(캘린더 일정은 제외, 2026-07-30) — 강성호 전용, 아래 §6 참고 |
@@ -79,7 +79,7 @@ shared/kv-client.js → shared/auth.js → collect-dates.js → collect-state.js
 ### collect-docword-rules.js
 | 함수 | 역할 |
 |---|---|
-| `aggregateSection(kind)` | 담당자 원문 → 가/나/다 구조로 취합(규칙 기반, AI 미사용). `perfNone`/`planNone` 체크박스로 표시했거나, 체크 없이 텍스트가 정확히 "없음"/"없습니다"류 한 마디뿐인 경우(`isNoneText`, `collect-state.js`) 취합에서 제외한다(2026-07-28 추가) |
+| `aggregateSection(kind, overrides)` | 담당자 원문 → 가/나/다 구조로 취합(규칙 기반, AI 미사용). `perfNone`/`planNone` 체크박스로 표시했거나, 체크 없이 텍스트가 정확히 "없음"/"없습니다"류 한 마디뿐인 경우(`isNoneText`, `collect-state.js`) 취합에서 제외한다(2026-07-28 추가). 두 번째 인자 `overrides`(선택, `{memberId:{perf,plan,perfNone,planNone}}`)를 주면 저장된 원본 대신 이 값을 쓴다 — `doAggregate()`가 취합 직전 AI로 정리한 내용을 여기로 끼워 넣을 때 씀(2026-08-07) |
 | `tokenizeParens` | 괄호 위첨자 규칙(센터코드 괄호는 제외) |
 | `docLinesToHtml` / `domToDocLines` | 구조 ↔ 화면 표시 상호 변환 |
 
@@ -248,3 +248,34 @@ A가 자기 것만 고쳤는데 B의 내용까지 바뀌어 보이는 사고가 
   `가. [리텐션] KB손보 정비(15) 운영회의 진행(8.6)\n ○ ...` 형태로 정확히 나오는 것까지 확인.
   이미 양식대로 쓴 내용은 API 호출 없이 즉시 저장되는 것, 정리 API 실패 시에도 원본이 정상
   저장되는 것(fail-open)도 확인.
+
+---
+
+## 8. 메인 취합("담당자 내용 전체 취합") 시점에도 미변환 원문 자동 정리 (2026-08-07 추가)
+
+- **문제였던 것**: §7의 저장 시 자동 정리는 **그 이후에 저장되는 내용에만** 적용된다. §7 배포
+  이전에 이미 자유 문장 그대로 저장돼 있던 기존 데이터, 또는 사용자가 §7의 "정리 결과 확인 후
+  재저장" 단계를 건너뛰지 않고도 여러 이유로 미변환 원문이 남아있는 경우, 메인 탭에서
+  "담당자 내용 전체 취합"을 누르면 여전히 `aggregateSection`의 `hasStruct===false` 경로를 타서
+  §7에서 고친 것과 같은 증상(첫 문장만 제목이 되고 나머지 손실)이 재현됐다.
+- **동작**: `doAggregate()`(`collect-main-panel.js`)가 `async`로 바뀌어, 취합 직전에 현재 주차에
+  보이는 담당자들의 저장된 실적/계획을 훑어서 `parseContentToLines(text).some(p=>p.type==='title')`
+  로 "가/나/다 제목줄이 없는" 것만 골라 `/api/format-weekly-entry`를 병렬(`Promise.all`)로 호출한다.
+  버튼은 처리 중 `⏳ 양식 정리 중…`으로 비활성화된다(`id="aggregateBtn"`).
+- **저장 데이터는 건드리지 않는다**: 정리 결과는 담당자 storage 키에 다시 쓰지 않고,
+  `aggregateSection(kind, overrides)`의 새 두 번째 인자 `overrides`(`{memberId:{perf,plan,perfNone,planNone}}`)
+  로만 넘겨서 **이번 취합 결과 화면에만** 반영한다 — 다른 담당자가 저장한 원본을 본인 확인 없이
+  조용히 덮어쓰지 않기 위한 의도적 설계(§7과 동일한 "AI 결과를 확인 없이 반영하지 않는다" 원칙의
+  연장선). 즉 취합을 누를 때마다 매번 다시 정리를 시도하며, 담당자 본인이 §7의 저장 흐름으로
+  직접 정리·확인·재저장하기 전까지는 원본 자체가 자유 문장인 채로 남아있다.
+  `aggregateSection` 함수 자체는 여전히 규칙 기반이며 AI를 직접 호출하지 않는다 — AI 호출은
+  전적으로 `doAggregate()` 쪽 책임이고, `aggregateSection`은 그 결과를 받아 쓸 수만 있게 된 것.
+- **`saveWordAndArchive()`도 함께 수정**: `doAggregate()`가 비동기가 되면서 뒤이어 바로
+  `state.aggregates[weekKey]`를 읽던 기존 코드가 스테일 데이터를 읽을 위험이 생겨
+  `await doAggregate();`로 수정.
+- **로컬 검증**: 모의 서버(포트 8791)에서 미변환 자유 문장 담당자 N명 저장 → 취합 클릭 →
+  `/api/format-weekly-entry` 호출 횟수가 정확히 "제목줄 없는 담당자 수"와 일치하는지, 이미
+  양식대로 저장된 담당자는 호출되지 않는지 확인. 정리 후 최종 취합 결과가 AI로 정리된 내용과
+  이미 구조화된 내용을 올바르게 합치는지 확인. 가장 중요하게, 취합 후에도 **원본 담당자
+  저장 데이터가 그대로 자유 문장으로 남아있는지**(서버에 저장된 원본을 다시 조회해 미변경
+  확인)까지 검증 완료. `saveWordAndArchive()`도 `await` 추가 후 정상 동작 재확인.

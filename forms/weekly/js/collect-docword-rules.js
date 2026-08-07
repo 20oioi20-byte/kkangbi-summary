@@ -72,14 +72,17 @@ function isOpsBullet(t){
   // 짧은 센터 운영·협의성 문구
   return /VOC|협의|미팅|개선|해피콜|운영관련|운영 관련|업무확대|보이스봇/.test(t) && t.length < 120;
 }
-function aggregateSection(kind){
+// overrides: {memberId: {perf, plan}} — doAggregate()가 취합 직전에 AI로 정리한 내용을 여기로
+// 끼워 넣을 때 쓴다. 저장된 원본(memberReport)을 덮어쓰지 않고 이 취합 결과에서만 반영하기
+// 위한 것 — 다른 담당자의 저장 데이터를 본인 확인 없이 조용히 바꾸지 않기 위함(2026-08-07).
+function aggregateSection(kind, overrides){
   const meta = currentMeta();
   const members = visibleMembers();
   const items = []; // {category, title, bullets:[{text, notes:[]}]}
   const centerBullets = [];
 
   members.forEach(m=>{
-    const r = memberReport(meta.weekKey, m.id);
+    const r = (overrides && overrides[m.id]) || memberReport(meta.weekKey, m.id);
     const noneFlag = kind==='perf' ? (r&&r.perfNone) : (r&&r.planNone);
     const text = kind==='perf' ? (r&&r.perf) : (r&&r.plan);
     // "없음" 체크박스로 표시했거나, 체크 없이 "없음"/"없습니다" 한 마디만 적은 경우 —

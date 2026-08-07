@@ -77,7 +77,7 @@ function renderMainPanel(){
         ${(finalPerf||finalPlan) ? `<div class="final-badge">취합 완료 · 워드 저장 시 동일 양식 적용</div>` : ''}
       </div>
       <div class="doc-actions">
-        <button class="btn btn-primary" onclick="doAggregate()">🔗 담당자 내용 전체 취합</button>
+        <button class="btn btn-primary" id="aggregateBtn" onclick="doAggregate()">🔗 담당자 내용 전체 취합</button>
         <button class="btn btn-green btn-2line" onclick="saveWordAndArchive()">💾 워드저장<br><span class="btn-sub">(양식다운로드+보관함)</span></button>
         <button class="btn btn-outline" onclick="downloadRateExcel()">⬇ 응대율 엑셀</button>
       </div>
@@ -133,10 +133,58 @@ function flushFinalEditNow(){
   agg.savedAt = new Date().toISOString();
   saveKV(aggKey(meta.weekKey), agg);
 }
-function doAggregate(){
+async function doAggregate(){
   const meta = currentMeta();
-  const linesPerf = aggregateSection('perf');
-  const linesPlan = aggregateSection('plan');
+
+  // 담당자 탭 "저장"에서는 자유 문장을 자동으로 정리하지만(collect-member-panel.js의
+  // saveMemberDraft), 그 기능이 생기기 전에 저장된 내용이거나 그 뒤로 다시 저장을 안 한
+  // 내용은 여전히 가/나/다 제목줄이 없는 상태로 남아있을 수 있다 — aggregateSection의
+  // 비구조화 처리는 원문 첫 문장(또는 60자)만 잘라 쓰고 나머지를 버리므로, 취합을 누르는
+  // 시점에도 한 번 더 확인해서 필요하면 정리한다. 단, 이건 이 취합 결과(아래 편집 가능한
+  // "취합 최종본" 박스)에만 반영하고 담당자 본인의 저장 데이터는 건드리지 않는다 —
+  // 본인 확인 없이 남의 저장 내용을 조용히 바꾸지 않기 위함.
+  const btn = document.getElementById('aggregateBtn');
+  const members = visibleMembers();
+  const toFix = [];
+  members.forEach(m=>{
+    const r = memberReport(meta.weekKey, m.id);
+    if(!r) return;
+    const needPerf = !r.perfNone && r.perf && r.perf.trim() && !parseContentToLines(r.perf).some(p=>p.type==='title');
+    const needPlan = !r.planNone && r.plan && r.plan.trim() && !parseContentToLines(r.plan).some(p=>p.type==='title');
+    if(needPerf || needPlan) toFix.push({memberId:m.id, r, needPerf, needPlan});
+  });
+
+  const overrides = {};
+  if(toFix.length){
+    if(btn){ btn.disabled = true; btn.textContent = '⏳ 양식 정리 중…'; }
+    flash(`자유 문장으로 작성된 ${toFix.length}명의 내용을 양식에 맞게 정리하는 중…`);
+    try{
+      const results = await Promise.all(toFix.map(async item=>{
+        const res = await fetch('/api/format-weekly-entry', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ perf: item.needPerf?item.r.perf:'', plan: item.needPlan?item.r.plan:'' })
+        });
+        const data = await res.json();
+        if(!res.ok || data.error) throw new Error(data.error || '정리 실패');
+        return {memberId:item.memberId, data, item};
+      }));
+      results.forEach(({memberId, data, item})=>{
+        overrides[memberId] = {
+          perf: item.needPerf && data.perf ? data.perf : item.r.perf,
+          plan: item.needPlan && data.plan ? data.plan : item.r.plan,
+          perfNone: item.r.perfNone, planNone: item.r.planNone,
+        };
+      });
+    }catch(e){
+      console.error(e);
+      flash('일부 내용 정리 실패 — 원본 그대로 취합합니다(' + (e.message||'네트워크 확인') + ')');
+      // overrides에 못 담은 멤버는 아래 aggregateSection이 저장된 원본을 그대로 씀(fail-open)
+    }
+    if(btn){ btn.disabled = false; btn.textContent = '🔗 담당자 내용 전체 취합'; }
+  }
+
+  const linesPerf = aggregateSection('perf', overrides);
+  const linesPlan = aggregateSection('plan', overrides);
   if(!linesPerf.length && !linesPlan.length){
     flash('저장된 담당자 실적/계획이 없습니다. 담당자 탭에서 먼저 저장하세요.');
     return;
@@ -159,7 +207,7 @@ async function saveWordAndArchive(){
   const meta = currentMeta();
   let agg = state.aggregates[meta.weekKey];
   if(!agg || (!agg.linesPerf?.length && !agg.linesPlan?.length)){
-    doAggregate();
+    await doAggregate(); // doAggregate가 이제 async라 반드시 await해야 아래에서 결과를 바로 읽을 수 있다
     agg = state.aggregates[meta.weekKey];
   }
   if(!agg || (!agg.linesPerf?.length && !agg.linesPlan?.length)){
