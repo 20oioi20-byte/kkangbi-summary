@@ -29,7 +29,7 @@
 | 워드 취합 규칙 엔진(가나다/○/※/괄호/소관센터 병합) | `js/collect-docword-rules.js` | `aggregateSection`, `tokenizeParens`, `docLinesToHtml` |
 | DOCX 실제 생성(표 구조·색상·폰트·자간) | `js/collect-docx-export.js` | `buildDocxBlob`, `wHeaderCell`, `wParagraph` — `../../shared/logo-data.js`의 `KT_LOGO_DATAURI` 사용 |
 | 메인 탭(취합 최종본·현황·주차이력) | `js/collect-main-panel.js` | `renderMainPanel`, `doAggregate`, `saveWordAndArchive` |
-| 담당자 탭(개인 작성·히스토리, **AI 초안은 강성호(m1)만**) | `js/collect-member-panel.js` | `renderMemberPanel`, `saveMemberDraft`, `generateAiDraft`(m1 전용, `/api/ai-weekly-draft` 호출) |
+| 담당자 탭(개인 작성·히스토리, **AI 초안은 강성호(m1)만**, **양식 자동정리는 전 담당자**) | `js/collect-member-panel.js` | `renderMemberPanel`, `saveMemberDraft`(전 담당자, `/api/format-weekly-entry` 호출), `generateAiDraft`(m1 전용, `/api/ai-weekly-draft` 호출) |
 | 응대율 탭(표·컬럼리사이즈·순서변경·담당자 필터·기본값 규칙) | `js/collect-rate-panel.js` | `renderRatePanel`, `startColResize`, `findRateDefault`/`effectiveRateValue`(기본값 규칙), `setRateMemberFilter` |
 | AI 초안 서버 프록시 | `api/ai-weekly-draft.js` | 일일보고/업무로그/직전주 작성분을 모아 Claude 호출(캘린더 일정은 제외, 2026-07-30) — 강성호 전용, 아래 §6 참고 |
 | 자료보관함 탭 | `js/collect-archive-panel.js` | `renderArchivePanel` |
@@ -190,3 +190,39 @@ A가 자기 것만 고쳤는데 B의 내용까지 바뀌어 보이는 사고가 
 - **AI 호출 방식**: 깡비서 본체 `api/chat.js`와 동일하게 서강대 API Gateway 우선 시도 → 실패 시에만 Anthropic 직접호출로 자동 폴백(월 제공 크레딧 절약). `GATEWAY_KEY`(`SOGANG_GATEWAY_KEY` 또는 `SOGANG_GATEWAY_API_KEY`)가 설정돼 있으면 `callGatewayClaude()`(OpenAI 호환 `/chat/completions` 형식, 모델 기본값 `claude-sonnet-4-6`)를 먼저 시도하고, 게이트웨이가 에러를 던지면 콘솔에 사유를 남기고 `callClaudeDirect()`로 넘어간다. 게이트웨이 키가 아예 없으면 바로 직접호출.
 - **필요 환경변수**: `ANTHROPIC_API_KEY`(필수, Vercel에 추가 필요 — 깡비서 본체(kkangbi-calendar) Vercel 프로젝트에 이미 있어도 이 프로젝트(kkangbi-summary)는 별도 Vercel 프로젝트라 따로 등록해야 함), `CLAUDE_MODEL`(선택, 기본값 `claude-sonnet-4-6`), `SOGANG_GATEWAY_KEY`(선택 — 설정 시에만 게이트웨이 우선 경로 활성화, 깡비서 본체 Vercel 프로젝트에 이미 등록된 값을 그대로 복사해서 이 프로젝트에도 등록), `SOGANG_GATEWAY_BASE`/`SOGANG_GATEWAY_MODEL`(선택, 각각 기본값 `https://factchat-cloud.mindlogic.ai/v1/gateway`/`claude-sonnet-4-6`). `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`는 `api/storage.js`와 동일한 것 재사용(깡비서 캘린더 앱과 같은 Supabase 프로젝트 공유 확인됨).
 - 위 스키마 전체를 가짜 Supabase/Anthropic 응답으로 로컬 검증 완료(월 경계를 넘는 이벤트 병합, 청크 재조립, 구/신 업무로그 병합 우선순위, 마커 파싱까지) — 스크래치패드 `test-ai-draft.mjs` 패턴 참고. 게이트웨이 성공/실패-폴백/미설정(직접호출) 세 경로 모두 스크래치패드 `test-ai-draft-gateway.mjs`로 검증 완료. 실제 배포 후 남은 건 실사용 확인뿐.
+
+---
+
+## 7. 양식 자동 정리("저장" 시 자유 문장 → 가/나/다·○·※ 변환) — 전 담당자 (2026-08-07 추가)
+
+- **문제였던 것**: `aggregateSection`(`collect-docword-rules.js`)은 "가."로 시작하는 제목줄이 하나도
+  없는 자유 문장을 받으면(`hasStruct===false`) `makeTitleFromBody()`가 **첫 문장(또는 60자)만
+  잘라서 제목으로 쓰고 나머지 내용은 그대로 버린다** — 이게 "메인 취합에서 원문이 한 줄로 잘려
+  나온다"는 문제의 실제 원인이었다. 정규식만으로는 "제목 vs 상세 분리 + 압축"을 할 수 없어서
+  AI가 필요했다.
+- **위치**: 담당자 탭(모든 담당자, m1 전용 아님) "💾 이번 주차 저장" 버튼. `saveMemberDraft`가
+  이제 `async`다.
+- **동작**: 저장 버튼을 누르면 먼저 `parseContentToLines(text).some(p=>p.type==='title')`로
+  "이미 가/나/다 제목줄이 있는지" 검사한다.
+  - 있으면(이미 양식대로 썼거나 깡비서 초안으로 채운 경우) — **AI 호출 없이** 바로 기존처럼 저장.
+  - 없으면(자유 문장) — `/api/format-weekly-entry`에 원문을 보내 정리된 버전을 받아 **입력란만
+    채우고 저장은 하지 않은 채 멈춘다**(`return`). 사용자가 내용을 확인하고 「저장」을 한 번 더
+    눌러야 진짜 저장된다 — 이 앱의 다른 AI 기능(깡비서 초안 등)과 동일하게 "AI 결과를 확인 없이
+    조용히 저장하지 않는다"는 원칙을 그대로 지킨 것.
+  - 정리 API가 실패하면(네트워크 등) 막지 않고 **원본 그대로 저장을 진행한다**(fail-open) —
+    안 그러면 AI가 계속 실패할 때 사용자가 영영 저장을 못 하게 된다.
+- **`api/format-weekly-entry.js`**: `api/ai-weekly-draft.js`와 달리 **Supabase/캘린더 자료를 전혀
+  조회하지 않는다** — 순수 텍스트 변환기(입력한 `perf`/`plan` 원문만 받아 정리된 버전을 돌려줌).
+  그래서 강성호 제한이 없고 전 담당자가 쓸 수 있다. 게이트웨이 우선→직접호출 폴백 방식과
+  UTF-8 버퍼 디코드는 다른 두 AI endpoint와 동일(`api/ai-weekly-draft.js`/`api/ai-merit-draft.js`).
+  **원문에 없는 내용을 지어내면 안 된다**는 지침을 시스템 프롬프트에 명시(초안 생성이 아니라
+  재구성·압축만 하는 게 이 endpoint의 역할). `[리텐션]/[인력]/[계약]/[기타]` 카테고리 대괄호를
+  AI가 제목에 직접 붙이도록 지시해서, `aggregateSection`의 기존 `hasStruct` 분기(대괄호를
+  `^\[([^\]]+)\]\s*(.*)$` 정규식으로 추출하는 로직)가 **수정 없이 그대로** 올바르게 작동한다 —
+  즉 이 기능은 `collect-docword-rules.js`를 전혀 건드리지 않고, 입력 품질만 개선해서 기존
+  취합 파이프라인이 원래 설계대로 작동하게 만든 것.
+- 로컬 검증(모의 서버 + 실제 aggregateSection 파이프라인): 자유 문장 저장 1차 클릭 → 정리된
+  내용으로 입력란만 채워지고 아직 미저장 확인 → 2차 클릭 → 실제 저장 → 메인 취합에서
+  `가. [리텐션] KB손보 정비(15) 운영회의 진행(8.6)\n ○ ...` 형태로 정확히 나오는 것까지 확인.
+  이미 양식대로 쓴 내용은 API 호출 없이 즉시 저장되는 것, 정리 API 실패 시에도 원본이 정상
+  저장되는 것(fail-open)도 확인.

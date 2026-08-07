@@ -81,20 +81,22 @@ function renderMemberPanel(memberId){
     <p class="hint">실적 ${meta.perfRange} / 계획 ${meta.planRange}<br>
       ${rs==='done'?badge('실적·계획 완료','done'):rs==='partial'?badge('일부 작성','partial'):badge('미작성','todo')}
       · 응대율 ${rt==='done'?badge('완료','done'):rt==='partial'?badge('일부','partial'):rt==='none'?badge('소관없음','partial'):badge('미작성','todo')}
+      <br>가/나/다 형식 없이 자유 문장으로 써도 됩니다 — 「저장」을 누르면 양식에 맞게 자동으로 정리해서
+      보여주고, 확인 후 한 번 더 누르면 진짜 저장됩니다.
     </p>
     <div class="field-label-row">
       <div class="field-label">실적 (${meta.perfRange})</div>
       <label class="none-check"><input type="checkbox" id="draft-perf-none" ${draft.perfNone?'checked':''} onchange="toggleNoneFlag('${memberId}','perf',this.checked)"> 실적 없음</label>
       ${memberId==='m1' ? `<button type="button" class="btn btn-outline btn-sm ai-draft-btn" id="aiDraftBtn" onclick="generateAiDraft('${memberId}')">🤖 깡비서 초안</button>` : ''}
     </div>
-    <textarea class="input-area" id="draft-perf" ${draft.perfNone?'disabled':''} placeholder="자유롭게 작성 (가/나/다, ○, ※ 형식이 있으면 취합 시 그대로 반영)">${draft.perfNone?'':escapeHtml(draft.perf)}</textarea>
+    <textarea class="input-area" id="draft-perf" ${draft.perfNone?'disabled':''} placeholder="편하게 자유 문장으로 작성하세요 — 저장할 때 양식에 맞게 자동 정리됩니다">${draft.perfNone?'':escapeHtml(draft.perf)}</textarea>
     <div class="field-label-row">
       <div class="field-label">계획 (${meta.planRange})</div>
       <label class="none-check"><input type="checkbox" id="draft-plan-none" ${draft.planNone?'checked':''} onchange="toggleNoneFlag('${memberId}','plan',this.checked)"> 계획 없음</label>
     </div>
     <textarea class="input-area" id="draft-plan" ${draft.planNone?'disabled':''} placeholder="다음 주 계획">${draft.planNone?'':escapeHtml(draft.plan)}</textarea>
     <div class="form-actions">
-      <button class="btn btn-primary" onclick="saveMemberDraft('${memberId}')">💾 이번 주차 저장</button>
+      <button class="btn btn-primary" id="saveMemberBtn" onclick="saveMemberDraft('${memberId}')">💾 이번 주차 저장</button>
       <button class="btn btn-outline" onclick="switchTab('main')">메인 현황</button>
     </div>
   </div>
@@ -175,7 +177,7 @@ async function generateAiDraft(memberId){
     if(btn){ btn.disabled = false; btn.textContent = '🤖 깡비서 초안'; }
   }
 }
-function saveMemberDraft(memberId){
+async function saveMemberDraft(memberId){
   const perfNone = !!document.getElementById('draft-perf-none').checked;
   const planNone = !!document.getElementById('draft-plan-none').checked;
   // "없음"으로 체크된 칸은 텍스트가 disabled로 잠겨있어도, 실제 저장되는 내용은 항상 빈 값으로
@@ -183,6 +185,43 @@ function saveMemberDraft(memberId){
   // r.perfNone/r.planNone 플래그도 같이 저장한다).
   const perf = perfNone ? '' : document.getElementById('draft-perf').value;
   const plan = planNone ? '' : document.getElementById('draft-plan').value;
+
+  // 자유 문장으로만 써서 "가./나./다." 제목줄이 하나도 없으면, 메인 취합 시 원문 전체가 한 줄
+  // 제목으로 잘려나가고 나머지 내용은 사라진다(aggregateSection의 비구조화 처리 한계). 이를 막기
+  // 위해 저장 직전에 양식 여부를 먼저 확인하고, 안 맞으면 AI로 정리해서 입력란만 채운 뒤(실제
+  // 저장은 하지 않음) 사용자가 확인하고 다시 저장을 눌러야 진짜 저장되게 한다 — 이 앱의 다른
+  // AI 기능(깡비서 초안 등)과 동일하게, AI 결과를 확인 없이 조용히 저장하지 않는다는 원칙 유지.
+  const perfNeedsFormat = !perfNone && perf.trim() && !parseContentToLines(perf).some(p=>p.type==='title');
+  const planNeedsFormat = !planNone && plan.trim() && !parseContentToLines(plan).some(p=>p.type==='title');
+
+  if(perfNeedsFormat || planNeedsFormat){
+    const btn = document.getElementById('saveMemberBtn');
+    if(btn){ btn.disabled = true; btn.textContent = '⏳ 양식 정리 중…'; }
+    flash('자유 문장으로 작성된 내용을 양식에 맞게 정리하는 중…');
+    try{
+      const res = await fetch('/api/format-weekly-entry', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ perf: perfNeedsFormat?perf:'', plan: planNeedsFormat?plan:'' })
+      });
+      const data = await res.json();
+      if(!res.ok || data.error) throw new Error(data.error || '정리 실패');
+      const meta0 = currentMeta();
+      draftBuffers[draftKey(meta0.weekKey, memberId)] = {
+        perf: perfNeedsFormat && data.perf ? data.perf : perf,
+        plan: planNeedsFormat && data.plan ? data.plan : plan,
+        perfNone, planNone,
+      };
+      flash('양식에 맞게 정리했습니다 — 내용을 확인하고 「저장」을 다시 눌러주세요.');
+      renderAll();
+      return; // 성공하면 여기서 멈추고 사용자 확인을 받는다 — 실제 저장은 다음 클릭에서
+    }catch(e){
+      console.error(e);
+      flash('양식 정리 실패(' + (e.message||'네트워크 확인') + ') — 원본 그대로 저장합니다.');
+      if(btn){ btn.disabled = false; btn.textContent = '💾 이번 주차 저장'; }
+      // 정리에 실패해도 사용자를 막지 않는다 — 아래로 흘러서 원본 그대로 저장 진행(fail-open)
+    }
+  }
+
   const meta = currentMeta();
   const report = {perf, plan, perfNone, planNone, savedAt:new Date().toISOString()};
   if(!state.reports[meta.weekKey]) state.reports[meta.weekKey]={};
