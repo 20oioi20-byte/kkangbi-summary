@@ -25,7 +25,7 @@
 |---|---|---|
 | 주차 계산 — **주간보고 본문**(항상 월~일 7일, 월 경계 넘어 계속 이어짐) | `js/collect-dates.js` | `getWeeksOfMonth`, `weekMetaFromDate` |
 | 주차 계산 — **응대율**(월 anchored, 매월 1일에 다시 시작·말일에 잘림 — 주간보고와 기준 다름, 2026-07-30) | `js/collect-dates.js` | `getRateWeeksOfMonth` — `collect-rate-panel.js`만 사용 |
-| 담당자/센터 기본값, 저장(Supabase `rpt_kv` 경유), 공용 헬퍼 | `js/collect-state.js` | `DEFAULT_MEMBERS`, `DEFAULT_CENTERS`, `loadState`, `mutateSharedList/Object`, 저장키 접두어 `KP='ktis_v11__weekly'` |
+| 담당자/센터 기본값, 저장(Supabase `rpt_kv` 경유), 공용 헬퍼 | `js/collect-state.js` | `DEFAULT_MEMBERS`, `DEFAULT_CENTERS`, `loadState`, `mutateSharedList/Object`, 저장키 접두어 `KP='ktis_v11__weekly'`, `memberRateStatus`(응대율 완료여부 — `findRateWeekOfDate`로 응대율 스킴 주차를 다시 찾아서 판정, §"collect-dates.js" 참고) |
 | 워드 취합 규칙 엔진(가나다/○/※/괄호/소관센터 병합, `overrides`로 AI 정리본 주입 가능) | `js/collect-docword-rules.js` | `aggregateSection`, `tokenizeParens`, `docLinesToHtml` |
 | DOCX 실제 생성(표 구조·색상·폰트·자간) | `js/collect-docx-export.js` | `buildDocxBlob`, `wHeaderCell`, `wParagraph` — `../../shared/logo-data.js`의 `KT_LOGO_DATAURI` 사용 |
 | 메인 탭(취합 최종본·현황·주차이력) | `js/collect-main-panel.js` | `renderMainPanel`, `doAggregate`(async, 미변환 원문 자동 정리 §8), `saveWordAndArchive` |
@@ -68,6 +68,7 @@ shared/kv-client.js → shared/auth.js → collect-dates.js → collect-state.js
 | `findWeekOfMonth(date)` | 주간보고 본문 | 날짜 → 소속 주차(`getWeeksOfMonth` 기준). 그 달 첫 월요일 이전 며칠(예: 1일이 화~일요일)은 전달의 마지막 주로 귀속 |
 | `weekMetaFromDate(d)` | 주간보고 본문 | 특정 날짜가 속한 주차 메타 정보(실적/계획 기간 등) — `getWeeksOfMonth` 기준 |
 | `nextWeekEntry` / `prevWeekEntry` | 주간보고 본문 | 월 경계를 자동으로 넘기는 주차 이동(`getWeeksOfMonth` 기준) — 주가 이어지므로 별도 처리 없이 그대로 동작 |
+| `findRateWeekOfDate(date)` | 응대율 완료여부 판정(`collect-state.js`의 `memberRateStatus`) | 날짜 → 소속 연/월/주차(`getRateWeeksOfMonth` 기준). `findWeekOfMonth`의 응대율판 — **아래 버그 참고, 이 함수가 없으면 두 스킴의 주차 번호가 섞인다** |
 
 **주의**: 예전엔 이 두 화면이 같은 함수(`getWeeksOfMonth`)를 공유하며 매월 1일에 주차가 강제로
 다시 시작했다(말일 주가 짧게 잘림). 2026-07-30에 주간보고 본문 쪽만 "월~일 7일이 월 경계와
@@ -75,6 +76,28 @@ shared/kv-client.js → shared/auth.js → collect-dates.js → collect-state.js
 방식(월 anchored)으로 되돌려 달라고 요청 → `getRateWeeksOfMonth`로 분리해서 응대율만 원래
 동작으로 복원했다. 새 기능을 만들 때 두 함수 중 어느 걸 쓸지 반드시 확인할 것 — 잘못 섞으면
 저장된 `weekKey`/`rate__{monthKey}__{centerId}`가 가리키는 날짜 범위가 또 어긋난다.
+
+**실제로 한 번 섞여서 터진 사례(2026-08-10 수정)**: `memberRateStatus(meta, memberId)`
+(`collect-state.js`)가 응대율 완료여부를 판정할 때 `meta.weekOfMonth`/`meta.monthKey`를 그대로
+썼는데, 이 `meta`는 **주간보고 스킴**(`weekMetaFromDate`/`getWeeksOfMonth`)에서 온 것이라
+응대율 저장 키(`getRateWeeksOfMonth` 기준 `w1~w5`)와 주차 번호가 어긋나는 달이 있다 — 1일이
+월요일이 아닌 달은 응대율 1주차가 짧게 먼저 끊기고 그만큼 이후 주차 번호가 전부 하나씩
+밀리기 때문(예: 2026-08-10은 주간보고 기준 2주차지만 응대율 기준으로는 3주차 — `node`로
+`weekMetaFromDate`/`getRateWeeksOfMonth` 직접 호출해 재현 확인). 그 결과 실제로는 담당자가
+활성 센터 응대율을 전부 입력했어도 `memberRateStatus`가 엉뚱한 주차 칸(`w2`)을 확인해서
+빈 걸로 잘못 읽고, 메인 취합 화면에 "응대율 일부"로 잘못 표시됐다 — 사용자는 이걸 "종료돼
+숨긴 센터를 안 채워서 그런가?"로 관찰했지만(숨긴 센터 자체는 `!c.hidden` 필터로 이미 정상
+제외되고 있었음), 실제 원인은 숨김 처리와 무관한 이 주차 인덱스 불일치였다. 고침:
+`findRateWeekOfDate(meta.mon)`로 응대율 기준 연/월/주차를 다시 찾아서 그 값으로
+`state.monthRates`/`findRateDefault`를 조회하도록 수정 — `node`로 개선 전/후 버전을 나란히
+호출해 개선 전엔 `todo`, 개선 후엔 `done`이 나오는 것으로 재현·검증 완료.
+
+**별도로 발견한(아직 미수정) 관련 결함**: `getRateWeeksOfMonth`는 그 달 1일이 토요일/일요일인
+경우 주차가 최대 6개(`idx<=7` 루프 조건)까지 생길 수 있는데(예: 2026년 8월은 1일이 토요일이라
+6주차=8.31 하루만 있음, `node`로 확인 완료), `collect-rate-panel.js`의 `renderRatePanel`/
+`downloadRateExcel`은 `weekCols`를 `[1,2,3,4,5]`로 5칸 고정해서 6주차는 화면에 아예 안 보이고
+입력할 곳이 없다 — 그런 달의 말일 응대율은 입력 자체가 불가능하다는 뜻. 이번 수정 범위 밖이라
+손대지 않았지만, 다음에 응대율 쪽을 만질 때 함께 고려할 것.
 
 ### collect-docword-rules.js
 | 함수 | 역할 |

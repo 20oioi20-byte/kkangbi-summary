@@ -217,15 +217,20 @@ function memberReportStatus(weekKey, memberId){
 function memberRateStatus(meta, memberId){
   const centers = state.centers.filter(c=>c.ownerId===memberId && !c.hidden);
   if(!centers.length) return 'none';
-  const mr = (state.monthRates[meta.monthKey]||{});
-  const wi = meta.weekOfMonth;
+  // meta는 주간보고(월~일 연속) 기준 주차라 응대율의 월 anchored 주차 번호와 어긋날 수 있다 —
+  // 반드시 findRateWeekOfDate로 응대율 기준 연/월/주차를 다시 찾아야 한다(2026-08-10 수정).
+  // 이걸 안 하면 실제로는 다 채운 응대율이 엉뚱한 주차 칸을 확인해서 "일부"로 잘못 표시된다.
+  const rw = findRateWeekOfDate(meta.mon);
+  if(rw.weekIndex==null) return 'todo'; // 응대율 표에 없는 주(월 6주차 초과 등) — 입력 자체가 불가
+  const mr = (state.monthRates[`${rw.year}-${pad2(rw.month)}`]||{});
+  const wi = rw.weekIndex;
   let filled=0;
   centers.forEach(c=>{
     const row = mr[c.id]||{};
     const v = row['w'+wi];
     const hasExplicit = v!==undefined && String(v).trim()!=='';
     // 기본값 규칙으로 자동 채워지는 주차도 "작성됨"으로 본다 (collect-rate-panel.js의 findRateDefault)
-    const hasDefault = !hasExplicit && typeof findRateDefault==='function' && findRateDefault(c.id, meta.year, meta.month, wi)!=null;
+    const hasDefault = !hasExplicit && typeof findRateDefault==='function' && findRateDefault(c.id, rw.year, rw.month, wi)!=null;
     if(hasExplicit || hasDefault) filled++;
   });
   if(filled===0) return 'todo';

@@ -47,6 +47,19 @@ function getRateWeeksOfMonth(year, month){
   return weeks;
 }
 
+// 어떤 날짜가 응대율 스킴 기준으로 몇 년 몇 월 몇 주차에 속하는지 찾는다. getWeeksOfMonth(주간보고)
+// 쪽 주차 번호와는 인덱스가 어긋날 수 있으므로(1일이 월요일이 아닌 달은 응대율 1주차가 짧게 먼저
+// 끊기고 그만큼 뒤 주차 번호가 하나씩 밀림 — 예: 2026-08-10은 주간보고 기준 2주차지만 응대율
+// 기준으로는 3주차), 응대율 저장 키(w1~w5)를 찾아야 하는 곳(memberRateStatus 등)에서
+// meta.weekOfMonth를 그대로 쓰면 안 되고 반드시 이 함수로 다시 찾아야 한다(2026-08-10 수정).
+function findRateWeekOfDate(date){
+  const d = new Date(date); d.setHours(0,0,0,0);
+  const year = d.getFullYear(), month = d.getMonth()+1;
+  const weeks = getRateWeeksOfMonth(year, month);
+  const w = weeks.find(w => d >= w.mon && d <= w.sun);
+  return { year, month, weekIndex: w ? w.index : null };
+}
+
 // 주간보고 본문(담당자 탭 실적/계획 기간)용 주차 계산. 주차는 항상 월요일~일요일 7일 고정이며,
 // 월 경계에서 끊기거나 다시 시작하지 않고 계속 이어진다
 // (예: 7.27~8.2, 8.3~8.9, ... 8.31~9.6 — 월이 바뀌어도 주 중간에 잘리지 않는다. 2026-07-30 변경).
