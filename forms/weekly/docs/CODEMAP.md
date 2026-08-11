@@ -111,7 +111,7 @@ shared/kv-client.js → shared/auth.js → collect-dates.js → collect-state.js
 |---|---|
 | `buildDocxBlob(meta, linesPerf, linesPlan)` | 실제 .docx 바이너리 생성 |
 | `wHeaderCell` / `wTeamCell` / `wContentCell` | 표 행 단위 XML 생성 (색상: 1행 D9D9D9, 2/4행 EFEFEF) |
-| `wParagraph` / `wRunsFromText` | 문단·런 단위 XML — 자간벌어짐 방지 설정(`autoSpaceDE/DN`, `snapToGrid`) 위치 |
+| `wParagraph` / `wRunsFromText` | 문단·런 단위 XML — 자간벌어짐 방지 설정(`autoSpaceDE/DN`, `snapToGrid`) 위치. 글자크기: 제목 `sz=24`(12pt)/내용(○·※) `sz=22`(11pt), 괄호 안 내용도 항상 같은 문맥의 크기를 그대로 씀(별도로 줄이지 않음). 줄간격: `w:line="240" w:lineRule="auto"`(1.0) |
 | `makeDocFileName` | 파일명 규칙: `AICC본부주간자료_AICC사업5팀_(저장일자)` |
 
 ### collect-rate-panel.js
@@ -302,3 +302,41 @@ A가 자기 것만 고쳤는데 B의 내용까지 바뀌어 보이는 사고가 
   이미 구조화된 내용을 올바르게 합치는지 확인. 가장 중요하게, 취합 후에도 **원본 담당자
   저장 데이터가 그대로 자유 문장으로 남아있는지**(서버에 저장된 원본을 다시 조회해 미변경
   확인)까지 검증 완료. `saveWordAndArchive()`도 `await` 추가 후 정상 동작 재확인.
+
+---
+
+## 9. 제목/내용 글자 크기 통일(12pt/11pt) + 괄호 위첨자 축소 제거 + 줄간격 1.0 (2026-08-10)
+
+- **바뀐 것 3가지**(화면 미리보기 `.doc-line`(`weekly.css`)와 실제 워드 출력(`collect-docx-export.js`)
+  양쪽 다 항상 짝을 맞춰서 고쳐야 한다 — 하나만 고치면 화면에서 본 것과 실제 워드 파일이
+  달라 보인다):
+  1. **제목 12pt(`sz=24`), 내용(○·※) 11pt(`sz=22`)**로 통일 — 이전에도 워드 출력 쪽
+     (`wParagraph`의 `baseSz`)은 이미 이 값이었지만, 화면 미리보기
+     (`.doc-line`)는 제목/내용 구분 없이 전부 `.final-box`의 `font-size:12.5px`를 상속해서
+     화면과 실제 워드가 서로 다른 크기로 보였다 — `.doc-line.title-line{font-size:12px}`/
+     `.doc-line{font-size:11px}`(기본값, o-line/note-line도 여기 해당)로 명시해서 통일.
+  2. **괄호 안 내용을 더 이상 작게 줄이지 않는다**: `tokenizeParens`가 "짧은 코드가 아닌 괄호"를
+     `super:true`로 표시하면(§7 참고) 화면에서는 `.paren-super{font-size:10px;vertical-align:super}`로,
+     워드에서는 `wRunsFromText`가 `sz=20`(10pt)+`<w:vertAlign w:val="superscript"/>`로 항상
+     작게·위첨자로 줄여서 렌더링했다. 사용자가 "괄호 안 내용도 제목/내용과 같은 크기로 해달라"고
+     요청 → 화면 CSS의 `.paren-super`에서 `font-size`/`vertical-align`/`line-height` 선언을 모두
+     빼서 부모 `.doc-line`(제목=12px, 내용=11px)을 그대로 상속하게 했고, 워드 쪽도
+     `wRunsFromText`의 `sz = r.super ? 20 : baseSz` 분기와 `vertAlign` 조건부 삽입을 제거해서
+     괄호 유무와 관계없이 항상 `baseSz`(문맥에 맞는 12/11) 그대로 나가게 했다. `tokenizeParens`/
+     `isAttachedCodeParen`의 "짧은 코드 vs 그 외" 판정 로직 자체는 그대로 뒀다(향후 다시 구분
+     렌더링이 필요해질 수 있어 손대지 않음) — 렌더링 단계에서만 두 경우를 동일하게 취급하도록
+     바꾼 것.
+  3. **줄간격 1.5→1.0**: 화면 `.doc-line`/`.final-box`의 `line-height:1.55` → `1`. 워드 쪽
+     `wParagraph`의 `<w:spacing .../>`가 `w:line="276"`(OOXML `lineRule="auto"` 기준 276/240=1.15배)
+     였던 것을 `w:line="240"`(정확히 1.0배)으로 변경 — 240이 OOXML에서 "단순(single)" 줄간격의
+     기준값.
+- **검증**: 모의 서버(포트 8791)에 실제 브라우저로 로그인 → 담당자 탭에 제목줄+○+※와 긴 설명이
+  든 괄호(`(8.6, 추가 설명 문구가 긴 괄호 테스트)`, `(부가 설명 괄호 테스트)`)를 포함한 내용을
+  저장 → 메인 탭에서 "담당자 내용 전체 취합" 실행 → `finalPerf`의 실제 렌더 결과를
+  `getComputedStyle`로 직접 읽어 확인: 제목줄과 그 안의 괄호 span 둘 다 `font-size:12px`/
+  `line-height:12px`(=1.0)/`vertical-align:baseline`(위첨자 아님), 내용줄과 그 안의 괄호 span
+  둘 다 `font-size:11px`/`line-height:11px`/`vertical-align:baseline`로 정확히 나오는 것 확인.
+  워드 쪽은 `node`로 `wParagraph`/`wRunsFromText`를 실제 소스 그대로 호출해 생성된 XML을 직접
+  검사 — 제목 줄의 모든 run(괄호 포함)이 `w:sz w:val="24"`, 내용 줄의 모든 run(괄호 포함)이
+  `w:sz w:val="22"`, `vertAlign` 태그가 아예 없는 것, `w:spacing`이 `w:line="240"`인 것까지
+  확인 완료.

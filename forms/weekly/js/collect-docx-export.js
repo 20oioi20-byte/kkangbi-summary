@@ -5,14 +5,15 @@ function xmlEsc(s){
 }
 function wRunsFromText(text, {bold=false, baseSz=24}={}){
   const runs = tokenizeParens(text);
+  // 괄호 안 내용(r.super)도 제목/내용과 같은 크기로 통일한다 — 예전엔 10pt+위첨자로 작게
+  // 줄였는데(2026-08-10 제거), 화면 미리보기(weekly.css .paren-super)와 짝을 맞춘 것.
   return runs.map(r=>{
-    const sz = r.super ? 20 : baseSz; // 10pt / 12pt
+    const sz = baseSz;
     const rPr = [
       '<w:rPr>',
       '<w:rFonts w:ascii="맑은 고딕" w:hAnsi="맑은 고딕" w:eastAsia="맑은 고딕"/>',
       bold ? '<w:b/>' : '',
       '<w:snapToGrid w:val="0"/>',
-      r.super ? '<w:vertAlign w:val="superscript"/>' : '',
       `<w:sz w:val="${sz}"/><w:szCs w:val="${sz}"/>`,
       '<w:color w:val="000000"/>',
       '</w:rPr>'
@@ -43,7 +44,7 @@ function wParagraph(line){
     <w:autoSpaceDE w:val="0"/><w:autoSpaceDN w:val="0"/>
     ${ind}
     <w:snapToGrid w:val="0"/>
-    <w:spacing w:after="0" w:before="0" w:line="276" w:lineRule="auto"/>
+    <w:spacing w:after="0" w:before="0" w:line="240" w:lineRule="auto"/>
     <w:jc w:val="left"/>
     <w:rPr><w:rFonts w:eastAsia="맑은 고딕"/><w:snapToGrid w:val="0"/><w:sz w:val="${baseSz}"/></w:rPr>
   </w:pPr>`;

@@ -59,14 +59,17 @@
   table.word-table td.hdr-sub{background:#EFEFEF;color:#000;font-weight:700;text-align:center;padding:8px;font-size:13px;}
   table.word-table td.teamlabel{background:#fff;font-weight:700;text-align:center;vertical-align:middle;width:76px;font-size:12.5px;padding:8px 4px;}
   .final-box{width:100%;min-height:96px;border:none;padding:10px 12px;font-size:12.5px;
-    line-height:1.55;font-family:inherit;display:block;background:#fff;color:#333;}
+    line-height:1;font-family:inherit;display:block;background:#fff;color:#333;}
   .final-box:empty:before{content:attr(data-placeholder);color:#999;}
   .final-badge{font-size:10.5px;color:#2a8;padding:4px 10px;background:#eefaf3;border-top:1px solid #ddd;}
 
-  /* 워드 작성규칙 렌더 */
-  .doc-line{margin:0;padding:0;line-height:1.55;white-space:pre-wrap;}
-  .doc-line.title-line{font-weight:700;}
-  .doc-line .paren-super{font-size:10px;vertical-align:super;line-height:0;font-weight:inherit;}
+  /* 워드 작성규칙 렌더 — 제목 12px/내용 11px 통일(괄호 안 내용도 동일, 워드 문서(collect-docx-export.js)
+     쪽 sz 값(24/22, half-point)과 짝을 맞춘 것 — 둘 중 하나만 바꾸면 화면 미리보기와 실제 워드
+     출력이 서로 다르게 보이니 항상 같이 바꿀 것. 2026-08-10: 괄호 안 내용을 10px+위첨자로 작게
+     줄이던 걸 없애고(제목/내용과 동일 크기로), 줄간격도 1.5→1.0으로 변경) */
+  .doc-line{margin:0;padding:0;font-size:11px;line-height:1;white-space:pre-wrap;}
+  .doc-line.title-line{font-size:12px;font-weight:700;}
+  .doc-line .paren-super{font-weight:inherit;}
   .doc-line.o-line{font-weight:400;}
   .doc-line.note-line{font-weight:400;color:#444;}
 
