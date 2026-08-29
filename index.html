@@ -22,7 +22,7 @@
 <div class="hub-wrap">
   <div class="hub-top">
     <h1>깡비서 · 자료취합 허브</h1>
-    <p class="hub-sub">AICC사업2단 사업5팀 · 팀에서 반복 취합하는 자료들을 양식별로 모아둔 곳입니다.</p>
+    <p class="hub-sub">성호님 개인 업무 도구를 한곳에 모아둔 공간입니다 · 반복 업무·문서 생성기를 양식별로 정리해둡니다.</p>
   </div>
 
   <div class="hub-toolbar">
@@ -40,10 +40,14 @@
 <script src="shared/auth.js"></script>
 <script>
   // 새 양식이 추가되면 이 배열에 카드 한 줄만 추가한다 (docs/HUB-CODEMAP.md도 함께 갱신할 것)
+  // url을 주면 이 허브 안의 forms/{slug}/ 대신 그 외부 주소로 바로 이동하는 카드가 된다
+  // (다른 곳에 이미 배포돼 있는 도구를 다시 만들지 않고 그대로 연결만 할 때 씀 — 새 탭으로 열림).
   const HUB_FORMS = [
     {slug:'weekly', icon:'📋', name:'주간보고 취합', desc:'AICC사업5팀 주간 실적/계획 취합 · 응대율 · 워드 자동생성', status:'live'},
     {slug:'makeup', icon:'📈', name:'Make up 계획 관리', desc:'AICC사업2단 사업5팀 Make up 달성계획 월별 관리', status:'live'},
     {slug:'merit',  icon:'🏅', name:'본부장표창 공적조서', desc:'실적 메모 → AI 초안(요약·활동·핵심가치) → 원본 양식 그대로 워드 저장', status:'live'},
+    {slug:'initech-billing', icon:'🧾', name:'이니텍 도급비 청구서 생성기', desc:'통신비 원자료 업로드 → 공문·청구내역서·통신비내역서 자동 조립', status:'live'},
+    {slug:'pay-table', icon:'💰', name:'급여테이블 생성기', desc:'별도 사이트에서 운영 중인 급여테이블 생성기로 바로 이동', status:'live', url:'https://pay-table.xn--2l0b841ao7b.kr'},
   ];
 
   // 숨김 상태는 팀 공유 값(서버)이다 — 한 사람이 숨기면 모두에게 숨겨진다.
@@ -92,11 +96,13 @@
     const list = HUB_FORMS.filter(f => showHidden || !hubHidden.includes(f.slug));
     grid.innerHTML = list.length ? list.map(f => {
       const hidden = hubHidden.includes(f.slug);
+      const href = f.url || `forms/${f.slug}/`;
+      const extAttrs = f.url ? ' target="_blank" rel="noopener"' : '';
       return `
       <div class="hub-card-wrap${hidden ? ' is-hidden' : ''}">
-        <a class="hub-card" href="forms/${f.slug}/">
+        <a class="hub-card" href="${href}"${extAttrs}>
           <div class="hub-card-icon">${f.icon}</div>
-          <div class="hub-card-name">${f.name}${hidden ? ' <span class="hub-badge">숨김</span>' : ''}</div>
+          <div class="hub-card-name">${f.name}${hidden ? ' <span class="hub-badge">숨김</span>' : ''}${f.url ? ' <span class="hub-badge hub-badge-ext">↗ 외부</span>' : ''}</div>
           <div class="hub-card-desc">${f.desc}</div>
         </a>
         <button class="hub-hide-btn" title="${hidden ? '다시 표시' : '목록에서 숨기기'}"
