@@ -14,7 +14,7 @@
 | 주간보고 취합 | `forms/weekly/` | [CODEMAP.md](../forms/weekly/docs/CODEMAP.md) | 매주 | 배포됨 |
 | Make up 계획 관리 | `forms/makeup/` | [CODEMAP.md](../forms/makeup/docs/CODEMAP.md) | 매월 | 배포됨 |
 | 본부장표창 공적조서 | `forms/merit/` | [CODEMAP.md](../forms/merit/docs/CODEMAP.md) | 반기 | 배포됨 |
-| 이니텍 도급비 청구서 생성기 | `forms/initech-billing/` | — (원본 단일 HTML을 잠금화면/허브홈링크만 씌워 그대로 배포, 내부 로직 문서화 없음. `standalone.html`은 잠금화면 없는 원본 그대로의 사본 — 헤더의 "⬇ HTML로 다운로드" 링크가 이 파일을 가리킴, 2026-09-21) | 매월 | 배포됨 |
+| 이니텍 도급비 청구서 생성기 | `forms/initech-billing/` | — (원본 단일 HTML을 허브홈링크만 씌워 그대로 배포, 내부 로직 문서화 없음. **잠금화면 없음**(2026-09-21 제거 — 접속 시 비번 없이 바로 씀, 허브 전체의 다른 양식과 다른 유일한 예외). `standalone.html`은 완전히 동일한 원본 그대로의 사본 — 헤더의 "⬇ HTML로 다운로드" 링크가 이 파일을 가리킴) | 매월 | 배포됨 |
 | 급여테이블 생성기 | *(외부 링크)* `pay-table.xn--2l0b841ao7b.kr` | — (이 저장소 밖의 별도 사이트 — 허브에서는 카드 클릭 시 새 탭으로 이동만 시킴) | 매월 | 배포됨(외부) |
 | 하반기 Makeup 보고 | `forms/?` | — | 반기 | 미착수 |
 | 중장기전략 보고 | `forms/?` | — | ? | 미착수 |
